@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+# Notebooks
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+
+# Tracking
+wandb/
+
+# Data and run outputs (keep folders only)
+data/*
+!data/.gitkeep
+runs/*
+!runs/.gitkeep
