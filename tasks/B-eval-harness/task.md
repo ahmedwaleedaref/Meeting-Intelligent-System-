@@ -62,8 +62,6 @@ Scope for now: utterance classification only (layer 1). The harness evaluates a 
 | Per-class P / R / F1 / support | all 7 classes |
 | Primary: macro-F1 (6 targets) | mean F1 over `cs, co, aa, bk, ar, cc`, excluding `other` |
 | Macro-F1 (7 classes) | secondary, for reference |
-| 3-class level | proposal = `cs` + `co`, response = `aa` + `bk` + `ar`, commitment = `cc`, `other` kept separate; per-class P/R/F1 and macro-F1 over the 3 |
-| `cs` + `co` pooled | reported alongside `cs` and `co` separately |
 | Confusion matrix | 7×7, raw counts and row-normalised (recall view) |
 | PR-AUC per class | only when `scores` is present |
 
@@ -79,8 +77,6 @@ Scope for now: utterance classification only (layer 1). The harness evaluates a 
  "primary": {"macro_f1_6": 0.00},
  "per_class": {"cs": {"p": 0.0, "r": 0.0, "f1": 0.0, "support": 0}, "...": {}},
  "macro_f1_7": 0.00,
- "three_class": {"proposal": {}, "response": {}, "commitment": {}, "macro_f1_3": 0.00},
- "cs_co_pooled": {},
  "confusion": {"labels": [], "counts": [[]]},
  "pr_auc": null}
 ```
@@ -97,7 +93,7 @@ Scope for now: utterance classification only (layer 1). The harness evaluates a 
 
 **Decisions:**
 - [x] Primary metric = macro-F1 over the 6 target classes, excluding `other`.
-- [x] Report `cs` + `co` pooled as well as separate.
+- [x] Drop the 3-class level and `cs` + `co` pooled for now: the 3-class representation will most likely not be kept.
 - [x] Harness is threshold-free (argmax).
 - [ ] Is PR-AUC worth computing from day 1, or added when the first score-producing model exists?
 

@@ -31,16 +31,17 @@ Roles: design + implementation (owner), tests (one member, written from task.md)
 - `scores` required for every model that can produce them; `null` only for generation-only prompting — needed for PR-AUC and calibration.
 - Validation failures raise an error, never a warning — a silently wrong metric is worse than a crash.
 - Primary metric = macro-F1 over the 6 target classes, excluding `other` — `other` dominates and would hide target-class performance.
-- `cs` + `co` reported pooled as well as separate — the two are hard to tell apart and are both proposals.
+- 3-class level and `cs` + `co` pooled dropped from B2 for now — the 3-class representation will most likely not be kept.
 - Harness is threshold-free (argmax); threshold tuning, if any, is an experiment — keeps the harness model-agnostic.
 - `zero_division=0`: a class with no predictions gets precision 0, never NaN — keeps macro averages defined.
 - Evaluating `test` requires an explicit flag recorded in the output — PROTOCOL §7.
+- `seg_id` uniqueness is guaranteed by the data side (task A); the harness only rejects duplicates inside a prediction file — the harness checks files, not the corpus.
+- A prediction file is all-scores or all-null, never mixed; only prompting outputs may be null — a mixed file means a broken pipeline.
+- Coverage check against the split's gold IDs (missing / extra) deferred until the gold loader exists (A10) — nothing to check against yet.
 
 ### Open
-- [ ] Confirm `seg_id` is unique across the corpus (check in A1; if not, add a suffix and document it).
-- [ ] Harness scores `label`, or argmax of `scores`? Proposed: score `label`, and fail if it disagrees with argmax of `scores` (tie rule needed).
+- [ ] Must `label` agree with argmax of `scores`? Not enforced for now; revisit with the first baseline outputs.
 - [ ] Target class with zero gold support in a split: counts as F1 = 0 in macro-F1 (6), or excluded? Proposed: count it as 0 and report support.
-- [ ] Mixed files (some lines with `scores`, some `null`): proposed: forbidden, all-or-nothing per file.
 - [ ] PR-AUC from day 1 or later? Proposed: day 1 (`average_precision_score`), `null` when no scores or no positives.
 - [ ] Source of `data_version` in `metrics.json`: proposed: frozen dataset metadata, not a function argument.
 
