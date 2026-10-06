@@ -12,6 +12,7 @@ from scripts.parse_nxt import write_jsonl  # noqa: E402
 from smi.data.nxt.ids import make_seg_id
 from smi.data.nxt.ordering import assign_positions
 from smi.data.nxt.parser import (
+    derive_part_times,
     find_pipe_boundaries,
     parse_corpus,
     resolve_word_range,
@@ -93,8 +94,40 @@ def test_pipe_alignment_rejects_wrong_part_count() -> None:
     assert find_pipe_boundaries(words, "hello", 2) is None
 
 
+def test_pipe_alignment_allows_leading_empty_part() -> None:
+    words = [
+        {"text": "and", "kind": "w", "start": 0.0, "end": 0.1},
+        {"text": "listen", "kind": "w", "start": 0.1, "end": 0.2},
+    ]
+    boundaries = find_pipe_boundaries(words, "| and listen", 2)
+    assert boundaries == [0]
+    assert split_words(words, boundaries, 2) == [[], words]
+
+
 def test_source_based_id_ignores_derived_part_timing() -> None:
     assert make_seg_id("Bdb001", "c1", "164.014", "165.974", 0, 2) == "Bdb001-c1_0164014_0165974_p1"
+
+
+def test_source_proportional_timing_divides_empty_parts_evenly() -> None:
+    timings, method = derive_part_times(10.0, 16.0, [[], [], []])
+    assert method == "transcript_proportional"
+    assert timings == [(10.0, 12.0), (12.0, 14.0), (14.0, 16.0)]
+
+
+def test_split_timing_is_monotonic_when_word_boundaries_reverse() -> None:
+    parts = [
+        [{"text": "one", "kind": "w", "start": 0.0, "end": 5.0}],
+        [{"text": "two", "kind": "w", "start": 3.0, "end": 4.0}],
+        [{"text": "three", "kind": "w", "start": 4.0, "end": 6.0}],
+    ]
+    timings, method = derive_part_times(0.0, 6.0, parts)
+    assert method == "transcript_word_boundary"
+    assert timings == [(0.0, 5.0), (5.0, 5.0), (5.0, 6.0)]
+
+
+def test_invalid_source_precision_is_not_converted_to_a_zero_id() -> None:
+    with pytest.raises(ValueError, match="more than millisecond precision"):
+        make_seg_id("M", "c0", "1.0005", "2.0", 0, 1)
 
 
 def test_ordering_is_source_based_and_contiguous() -> None:

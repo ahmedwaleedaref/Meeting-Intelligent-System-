@@ -7,7 +7,7 @@ This is the normative schema for `data/interim/parsed/rows.jsonl`. T1 writes one
 | `seg_id` | string | `{meeting}-{channel}_{src_start_ms:07d}_{src_end_ms:07d}`, with `_p1`, `_p2`, … for split acts. Milliseconds come from the source decimal string, never a float or derived time. |
 | `meeting`, `agent` | string | Meeting and DA-file agent letter. |
 | `channel`, `speaker_id` | string | Verbatim NXT `channel` and `participant`. |
-| `src_start`, `src_end` | number | Original DA element times in seconds. |
+| `src_start`, `src_end` | number | Parsed original DA element times in seconds. Rows with `time_invalid` retain the best available numeric placeholder and are never eligible for a clean build. |
 | `start`, `end` | number | This part's derived span, constrained within the source span. |
 | `timing_method` | string | `element`, `transcript_word_boundary`, `transcript_proportional`, or `source_proportional`. |
 | `position` | integer | Zero-based meeting-local rank by `(src_start, src_end, agent, element_ordinal, part_index)`. |
@@ -24,10 +24,12 @@ This is the normative schema for `data/interim/parsed/rows.jsonl`. T1 writes one
 
 - `element`: an unsplit source act keeps its complete source span.
 - `transcript_word_boundary`: a transcript pipe aligns to the ordered word range; a part boundary is the previous word's end, or next word's start when needed.
-- `transcript_proportional`: a uniquely aligned pipe has no usable timing on at least one boundary, so boundaries are proportional to word counts within the source span.
-- `source_proportional`: a valid source act has no word reference; its split parts divide the source span evenly by empty-part word count fallback.
+- `transcript_proportional`: a uniquely aligned pipe has no usable timing on at least one boundary, so boundaries are proportional to word counts within the source span. If every part is empty, the source span is divided evenly by part count.
+- `source_proportional`: a valid source act has no word reference; its split parts divide the source span evenly by part count.
 
-The alignment normalizer is only for comparison: it lowercases and ignores non-alphanumeric characters, while considering only lexical `w` elements. It never changes stored text. Punctuation-only source tokens remain with the preceding part.
+The alignment normalizer is only for comparison: it lowercases and ignores non-alphanumeric characters, while considering only lexical `w` elements. It never changes stored text. Punctuation-only source tokens remain with the preceding part. A boundary at the
+start or end of the referenced range can therefore produce an empty part, which
+is retained and reported.
 
 ## Pipe-boundary acceptance rule
 
@@ -42,6 +44,9 @@ If any condition fails, the parser must not guess a split or copy transcript tex
 ## Quality flags
 
 Informational: `no_word_ref`, `type_fallback_original`, `word_time_missing`.
+`word_time_missing` is emitted when any selected NXT word-like element has a
+missing start or end time, including non-lexical markers; the report separates
+row-level and element-level counts.
 
 Error-class: `ref_unresolved`, `ref_malformed`, `time_invalid`, `type_unavailable`. An unresolved transcript pipe boundary is recorded as `ref_unresolved` because C1 has no separate pipe-error value. Error-class rows are retained for investigation and make the build exit non-zero.
 

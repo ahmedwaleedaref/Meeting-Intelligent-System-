@@ -1,11 +1,9 @@
 # NXT parser usage guide
 
 This guide explains how to run the T1 NXT parser and inspect its output.
-Run the commands from the repository root:
-
-```text
-C:\Users\mohammed adel\my-github\Meeting-Intelligent-System-
-```
+Run the commands from the repository root. The commands below use the
+repository-local virtual environment and do not depend on a machine-specific
+absolute path.
 
 ## 1. Prepare the environment
 
@@ -90,11 +88,13 @@ The validation report and provenance file remain at their repository paths.
 
 ## 6. Understand the exit status
 
-The parser writes inspection output before it evaluates the final status.
+The parser always writes the requested JSONL for inspection before it evaluates
+the final status. On failure it writes `reports/parse_validation.failed.md` and
+does not replace the clean validation report or C1 provenance fingerprint.
 
 - Exit code `0`: the rows and validation checks are safe for the next task.
 - Exit code `1`: output was written for inspection, but a fatal source or
-  contract problem remains.
+  contract problem remains. The committed clean artifact is left unchanged.
 
 An exit code of `1` is intentional when unresolved transcript boundaries,
 invalid references, invalid timing, unavailable types, or contract failures
@@ -118,7 +118,9 @@ Check the following sections:
 
 - source structure and row-count reconciliation;
 - rows by number of pipe parts;
+- timing-method and element-level flag counts;
 - quality flags;
+- empty-text split rows;
 - contract checks;
 - unresolved source summary;
 - unresolved transcript boundaries.

@@ -159,6 +159,8 @@ def find_pipe_boundaries(
         consumed += alignment_text(part_text)
         matching_indexes: list[int] = []
         source_prefix = ""
+        if not consumed:
+            matching_indexes.append(0)
         for index, word in enumerate(words, start=1):
             # Transcript words correspond to lexical `w` elements. NXT's other
             # element kinds remain in C1 text, but descriptions such as "breath"
@@ -212,19 +214,31 @@ def derive_part_times(
             all_boundaries_have_word_time = False
             break
     if not all_boundaries_have_word_time:
-        total_words = max(sum(len(part) for part in parts), 1)
-        words_before = 0
+        total_words = sum(len(part) for part in parts)
+        if total_words == 0:
+            boundary_fractions = [
+                index / len(parts)
+                for index in range(1, len(parts))
+            ]
+        else:
+            words_before = 0
+            boundary_fractions = []
+            for part in parts[:-1]:
+                words_before += len(part)
+                boundary_fractions.append(words_before / total_words)
+
         boundary_times = []
-        for part in parts[:-1]:
-            words_before += len(part)
-            fraction = words_before / total_words
+        for fraction in boundary_fractions:
             boundary_times.append(source_start + (source_end - source_start) * fraction)
         method = "transcript_proportional"
     else:
-        boundary_times = [
-            min(source_end, max(source_start, value))
-            for value in boundary_times
-        ]
+        bounded_times: list[float] = []
+        previous_boundary = source_start
+        for value in boundary_times:
+            bounded_value = min(source_end, max(previous_boundary, value))
+            bounded_times.append(bounded_value)
+            previous_boundary = bounded_value
+        boundary_times = bounded_times
         method = "transcript_word_boundary"
 
     endpoints = [source_start, *boundary_times, source_end]
@@ -240,6 +254,17 @@ def build_text(words: list[dict[str, Any]]) -> str:
     return " ".join(word["text"] for word in words if word["text"])
 
 
+def count_source_pipe_parts(dialogue_paths: list[Path]) -> int:
+    """Count source type parts through a separate raw-XML traversal."""
+    part_count = 0
+    for dialogue_path in dialogue_paths:
+        root = ElementTree.parse(dialogue_path).getroot()
+        for dialogue_act in root.findall("dialogueact"):
+            source_type = dialogue_act.get("type") or dialogue_act.get("original-type") or ""
+            part_count += len(source_type.split("|"))
+    return part_count
+
+
 def parse_corpus(
     raw_root: Path,
     transcript_corrections: dict[str, list[str]] | None = None,
@@ -248,23 +273,26 @@ def parse_corpus(
     dialogue_directory = raw_root / "DialogueActs"
     words_directory = raw_root / "Words"
     transcript_directory = raw_root / "transcripts"
-    if (
-        not dialogue_directory.is_dir()
-        or not words_directory.is_dir()
-        or not transcript_directory.is_dir()
-    ):
+    if not dialogue_directory.is_dir() or not words_directory.is_dir():
         raise FileNotFoundError(
-            "Expected DialogueActs, Words, and transcripts under the raw-data root"
+            "Expected DialogueActs and Words under the raw-data root"
+        )
+    if not transcript_directory.is_dir():
+        raise FileNotFoundError(
+            "Expected the required pipe-preserving transcripts directory under "
+            f"{raw_root}"
         )
 
     transcripts = load_transcripts(transcript_directory, transcript_corrections)
     rows: list[dict[str, Any]] = []
     counts: Counter[str] = Counter()
+    counts["transcript_corrections"] = len(transcript_corrections or {})
     transcript_problems: list[dict[str, str]] = []
     word_cache: dict[str, tuple[list[dict[str, Any]], dict[str, int]]] = {}
     da_paths = sorted(dialogue_directory.glob("*.dialogue-acts.xml"))
     counts["dialogue_act_files"] = len(da_paths)
     counts["meetings"] = len({path.name.split(".")[0] for path in da_paths})
+    counts["independent_pipe_parts"] = count_source_pipe_parts(da_paths)
 
     for da_path in da_paths:
         meeting, agent, _ = da_path.name.split(".", 2)
@@ -313,8 +341,6 @@ def parse_corpus(
                     flags.append("type_unavailable")
 
             part_types = selected_type.split("|")
-            counts["independent_pipe_parts"] += len(part_types)
-
             # Resolve the referenced words, reusing each words file after its
             # first load.
             child = next(
@@ -419,8 +445,8 @@ def parse_corpus(
                     )
                 except ValueError:
                     segment_id = (
-                        f"{meeting}-{dialogue_act.get('channel', '')}"
-                        "_0000000_0000000"
+                        f"{meeting}-{dialogue_act.get('channel', '')}_invalid_"
+                        f"{dialogue_act.get(NITE_ID, element_ordinal)}"
                     )
                     if len(part_types) > 1:
                         segment_id += f"_p{part_index + 1}"

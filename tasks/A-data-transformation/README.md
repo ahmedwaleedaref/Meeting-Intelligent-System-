@@ -6,14 +6,16 @@ Status: implemented. The current corpus parses cleanly after a documented recons
 
 ## Decisions
 
-- A1 split boundaries require the exact meeting, channel, and source timestamps, an exact transcript/source part-count match, and one unique ordered lexical boundary; reason: ambiguous boundaries must not become fabricated gold data.
-- A1 uses transcript-aligned word boundaries for part timing and proportional timing only when a boundary word lacks usable timing; reason: preserve source timing where available while keeping split spans inside the source act.
+- A1 split boundaries require the exact meeting, channel, and source timestamps, an exact transcript/source part-count match, and one unique ordered lexical boundary; reason: ambiguous boundaries must not become fabricated gold data. See [the C1 schema](schema/01_parsed_rows.md#pipe-boundary-acceptance-rule).
+- A1 uses transcript-aligned word boundaries for part timing and proportional timing only when a boundary word lacks usable timing; reason: preserve source timing where available while keeping split spans inside the source act. See [timing methods](schema/01_parsed_rows.md#timing-methods).
 - NXT dialogue-act and word XML remain canonical; transcript text is used only to locate pipe boundaries and is never copied into C1; reason: transcript review must not alter dialogue-act labels or word data.
 - Source token text and case, including disfluencies, fillers, fragments, quotes, and non-`w` content, are preserved; reason: C1 should represent the annotated speech rather than a cleaned transcript.
+- D13 remains pending: the C1 artifact preserves all NXT lexical and non-lexical elements, and downstream ownership must decide how they are presented to models.
 - Transcript-only corrections are recorded in the tracked provenance table and may repair markup, spelling, tokenization, or missing pipe-preserving renderings, but may not rewrite NXT source data; reason: corrections must be reproducible without changing the gold source.
 - The missing `Bro003.F.dialogueact12` transcript record is reconstructed from its canonical NXT lexical word range with the pipe after the initial `Uh`; reason: downstream stages need a usable deterministic split, while the provenance record makes clear that this is a reconstruction rather than recovered original transcript text.
 - Unresolved source records are retained for inspection, marked `ref_unresolved`, reported once per source dialogue act, and make the parser exit non-zero; reason: unresolved data must block a frozen release rather than be silently accepted.
 - The local development environment uses Python 3.11 with dependencies installed from `requirements.txt` into `.venv`; reason: parser and test execution must be reproducible for teammates.
+- Table 5 comparison remains pending because the table is not present in this repository; the measured source counts are recorded in the generated validation report.
 
 ## Experiments
 

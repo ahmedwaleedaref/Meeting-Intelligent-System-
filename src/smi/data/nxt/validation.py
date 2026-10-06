@@ -71,6 +71,19 @@ def write_validation_report(
     """Write a deterministic report from measured parser results."""
     flags = Counter(flag for row in rows for flag in row["quality_flags"])
     rows_by_parts = Counter(row["n_parts"] for row in rows)
+    timing_methods = Counter(row["timing_method"] for row in rows)
+    element_flags: dict[str, set[str]] = defaultdict(set)
+    for row in rows:
+        element_flags[row["source_da_id"]].update(row["quality_flags"])
+    element_flag_counts = Counter(
+        flag
+        for row_flags in element_flags.values()
+        for flag in row_flags
+    )
+    empty_split_rows = sum(
+        not row["text"] and row["n_parts"] > 1
+        for row in rows
+    )
     error_sources = {
         row["source_da_id"]: tuple(sorted(ERROR_FLAGS.intersection(row["quality_flags"])))
         for row in rows
@@ -90,6 +103,7 @@ def write_validation_report(
         f"- Generated C1 rows: {len(rows)}",
         f"- Independent pipe-part count: {source_counts['independent_pipe_parts']}",
         f"- Reconciliation: {'matches' if len(rows) == source_counts['independent_pipe_parts'] else 'DIFFERS'}.",
+        f"- Transcript corrections applied: {source_counts['transcript_corrections']}",
         "",
         "## Rows by number of pipe parts",
         "",
@@ -104,6 +118,26 @@ def write_validation_report(
         ]
     else:
         lines.append("- None")
+    lines += ["", "## Timing methods", ""]
+    lines += [
+        f"- `{method}`: {count}"
+        for method, count in sorted(timing_methods.items())
+    ]
+    lines += [
+        "",
+        "## Element-level quality flags",
+        "",
+    ]
+    if element_flag_counts:
+        lines += [
+            f"- `{flag}`: {count}"
+            for flag, count in sorted(element_flag_counts.items())
+        ]
+    else:
+        lines.append("- None")
+    lines.append(
+        f"- Empty-text split rows (not necessarily errors): {empty_split_rows}"
+    )
     lines.append(f"- Error-class source dialogue acts: {len(error_sources)}")
     lines += [
         "",

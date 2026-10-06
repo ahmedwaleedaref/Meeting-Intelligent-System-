@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import subprocess
 import sys
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -75,15 +76,35 @@ def build_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def write_provenance(output_hash: str) -> None:
-    """Record the generated artifact path and content hash."""
+def write_provenance(
+    output_hash: str,
+    row_count: int,
+    output_path: Path,
+) -> None:
+    """Record the generated artifact hash and the source commit."""
     PROVENANCE_DIRECTORY.mkdir(parents=True, exist_ok=True)
     provenance_path = PROVENANCE_DIRECTORY / "c1.json"
+    try:
+        producing_commit = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        producing_commit = None
+    try:
+        recorded_path = output_path.relative_to(PROJECT_ROOT).as_posix()
+    except ValueError:
+        recorded_path = str(output_path)
     provenance_path.write_text(
         json.dumps(
             {
-                "path": "data/interim/parsed/rows.jsonl",
+                "path": recorded_path,
                 "sha256": output_hash,
+                "row_count": row_count,
+                "producing_commit": producing_commit,
             },
             indent=2,
         )
@@ -109,25 +130,27 @@ def main() -> int:
     )
     contract_problems = validate_rows(rows)
     write_jsonl(rows, arguments.output)
-    output_hash = sha256(arguments.output)
+    fatal = has_fatal_errors(rows, transcript_problems, contract_problems)
+    report_path = REPORT_PATH if not fatal else REPORT_PATH.with_suffix(".failed.md")
 
     write_validation_report(
-        REPORT_PATH,
+        report_path,
         rows,
         source_counts,
         transcript_problems,
         contract_problems,
     )
-    write_provenance(output_hash)
 
-    if has_fatal_errors(rows, transcript_problems, contract_problems):
+    if fatal:
         print(
             "C1 was written for inspection, but validation found fatal "
-            "source or contract errors.",
+            f"source or contract errors. See {report_path}.",
             file=sys.stderr,
         )
         return 1
 
+    output_hash = sha256(arguments.output)
+    write_provenance(output_hash, len(rows), arguments.output)
     print(f"Wrote {len(rows)} C1 rows to {arguments.output}")
     return 0
 

@@ -1,6 +1,8 @@
 {
   "source": "ICSI Core NXT release",
+  "release": "ICSI Core NXT archive",
   "raw_root": "data/raw/icsi_core_nxt",
-  "archive_sha256": null,
-  "limitation": "The working tree contains the extracted release, not the original archive; an archive SHA-256 cannot be verified here."
+  "archive_sha256": "cf4860245b9ca9c9ed11a66e5a74cfea2a99a686a52f7580aa0a6bc2225895a",
+  "transcript_source": "reviewed pipe-preserving transcript files under data/raw/icsi_core_nxt/transcripts",
+  "transcript_corrections": "tasks/A-data-transformation/provenance/transcript_corrections.json"
 }
