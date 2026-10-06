@@ -1,0 +1,20 @@
+{
+  "dataset_stage": "C2",
+  "status": "input_files_validated;_task2_regeneration_unavailable",
+  "rows": {
+    "path": "data/interim/annotated/rows.jsonl",
+    "sha256": "cce142e5a64fbf292b371cae4a314386a297b047a3ab33cbb7bb50ca5f5e8d89",
+    "row_count": 118694
+  },
+  "links": {
+    "path": "data/interim/annotated/links.jsonl",
+    "sha256": "bf6d20b739a8e596ac4efe36a50e256e28d702ad5782949503c99ccd20e74681",
+    "row_count": 3831
+  },
+  "validation": {
+    "release_contract": "passed",
+    "error_class_quality_flags": 0,
+    "task2_clean_regeneration": "not_performed"
+  },
+  "regeneration_note": "The fetched origin/A/labels-links commit 9a76d167f3b6cef710c428586c65cb681ad3f537 contains only the project scaffold and no Task 2 annotation or link-generation implementation. These hashes identify the supplied C2 inputs; they do not establish how Task 2 generated them."
+}

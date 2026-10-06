@@ -1,0 +1,475 @@
+{
+  "folds": {
+    "grouping": "meeting",
+    "k": 5,
+    "method": "Sort train and val meeting IDs lexicographically, then assign round-robin to folds 0 through k-1.",
+    "seed": null
+  },
+  "meetings": [
+    {
+      "fold": 0,
+      "meeting_id": "Bdb001",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bdb, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 1,
+      "meeting_id": "Bed002",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bed, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": null,
+      "meeting_id": "Bed003",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bed, deterministic seed icsi-mrda-split-v1",
+      "split": "test"
+    },
+    {
+      "fold": null,
+      "meeting_id": "Bed004",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bed, deterministic seed icsi-mrda-split-v1",
+      "split": "test"
+    },
+    {
+      "fold": 2,
+      "meeting_id": "Bed005",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bed, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 3,
+      "meeting_id": "Bed006",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bed, deterministic seed icsi-mrda-split-v1",
+      "split": "val"
+    },
+    {
+      "fold": 4,
+      "meeting_id": "Bed008",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bed, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 0,
+      "meeting_id": "Bed009",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bed, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 1,
+      "meeting_id": "Bed010",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bed, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": null,
+      "meeting_id": "Bed011",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bed, deterministic seed icsi-mrda-split-v1",
+      "split": "test"
+    },
+    {
+      "fold": 2,
+      "meeting_id": "Bed012",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bed, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 3,
+      "meeting_id": "Bed013",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bed, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 4,
+      "meeting_id": "Bed014",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bed, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 0,
+      "meeting_id": "Bed015",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bed, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 1,
+      "meeting_id": "Bed016",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bed, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 2,
+      "meeting_id": "Bed017",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bed, deterministic seed icsi-mrda-split-v1",
+      "split": "val"
+    },
+    {
+      "fold": 3,
+      "meeting_id": "Bmr001",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 4,
+      "meeting_id": "Bmr002",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 0,
+      "meeting_id": "Bmr003",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "val"
+    },
+    {
+      "fold": 1,
+      "meeting_id": "Bmr005",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 2,
+      "meeting_id": "Bmr006",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 3,
+      "meeting_id": "Bmr007",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": null,
+      "meeting_id": "Bmr008",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "test"
+    },
+    {
+      "fold": 4,
+      "meeting_id": "Bmr009",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 0,
+      "meeting_id": "Bmr010",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 1,
+      "meeting_id": "Bmr011",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "val"
+    },
+    {
+      "fold": 2,
+      "meeting_id": "Bmr012",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 3,
+      "meeting_id": "Bmr013",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "val"
+    },
+    {
+      "fold": 4,
+      "meeting_id": "Bmr014",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "val"
+    },
+    {
+      "fold": 0,
+      "meeting_id": "Bmr015",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 1,
+      "meeting_id": "Bmr016",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": null,
+      "meeting_id": "Bmr018",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "test"
+    },
+    {
+      "fold": 2,
+      "meeting_id": "Bmr019",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 3,
+      "meeting_id": "Bmr020",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 4,
+      "meeting_id": "Bmr021",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 0,
+      "meeting_id": "Bmr022",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": null,
+      "meeting_id": "Bmr023",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "test"
+    },
+    {
+      "fold": 1,
+      "meeting_id": "Bmr024",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "val"
+    },
+    {
+      "fold": 2,
+      "meeting_id": "Bmr025",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 3,
+      "meeting_id": "Bmr026",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 4,
+      "meeting_id": "Bmr027",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 0,
+      "meeting_id": "Bmr028",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": null,
+      "meeting_id": "Bmr029",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "test"
+    },
+    {
+      "fold": 1,
+      "meeting_id": "Bmr030",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 2,
+      "meeting_id": "Bmr031",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bmr, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 3,
+      "meeting_id": "Bns001",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bns, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 4,
+      "meeting_id": "Bns002",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bns, deterministic seed icsi-mrda-split-v1",
+      "split": "val"
+    },
+    {
+      "fold": 0,
+      "meeting_id": "Bns003",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bns, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 1,
+      "meeting_id": "Bro003",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bro, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": null,
+      "meeting_id": "Bro004",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bro, deterministic seed icsi-mrda-split-v1",
+      "split": "test"
+    },
+    {
+      "fold": 2,
+      "meeting_id": "Bro005",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bro, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 3,
+      "meeting_id": "Bro007",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bro, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 4,
+      "meeting_id": "Bro008",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bro, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 0,
+      "meeting_id": "Bro010",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bro, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 1,
+      "meeting_id": "Bro011",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bro, deterministic seed icsi-mrda-split-v1",
+      "split": "val"
+    },
+    {
+      "fold": null,
+      "meeting_id": "Bro012",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bro, deterministic seed icsi-mrda-split-v1",
+      "split": "test"
+    },
+    {
+      "fold": 2,
+      "meeting_id": "Bro013",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bro, deterministic seed icsi-mrda-split-v1",
+      "split": "val"
+    },
+    {
+      "fold": null,
+      "meeting_id": "Bro014",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bro, deterministic seed icsi-mrda-split-v1",
+      "split": "test"
+    },
+    {
+      "fold": 3,
+      "meeting_id": "Bro015",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bro, deterministic seed icsi-mrda-split-v1",
+      "split": "val"
+    },
+    {
+      "fold": 4,
+      "meeting_id": "Bro016",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bro, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 0,
+      "meeting_id": "Bro017",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bro, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 1,
+      "meeting_id": "Bro018",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bro, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 2,
+      "meeting_id": "Bro019",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bro, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 3,
+      "meeting_id": "Bro021",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bro, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 4,
+      "meeting_id": "Bro022",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bro, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 0,
+      "meeting_id": "Bro023",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bro, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 1,
+      "meeting_id": "Bro024",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bro, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 2,
+      "meeting_id": "Bro025",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bro, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 3,
+      "meeting_id": "Bro026",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bro, deterministic seed icsi-mrda-split-v1",
+      "split": "val"
+    },
+    {
+      "fold": null,
+      "meeting_id": "Bro027",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bro, deterministic seed icsi-mrda-split-v1",
+      "split": "test"
+    },
+    {
+      "fold": 4,
+      "meeting_id": "Bro028",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bro, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 0,
+      "meeting_id": "Bsr001",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Bsr, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": 1,
+      "meeting_id": "Btr001",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Btr, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    },
+    {
+      "fold": null,
+      "meeting_id": "Btr002",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Btr, deterministic seed icsi-mrda-split-v1",
+      "split": "test"
+    },
+    {
+      "fold": 2,
+      "meeting_id": "Buw001",
+      "reason": "Project-selected 51/12/12 split, stratified by meeting series Buw, deterministic seed icsi-mrda-split-v1",
+      "split": "train"
+    }
+  ],
+  "sources": {
+    "meeting_universe": "ICSI-metadata.xml <observation> names",
+    "split_lists": "Project-selected 51/12/12 meeting-level split, stratified by meeting-series prefix using deterministic SHA-256 ordering; seed=icsi-mrda-split-v1"
+  },
+  "split_assignment": {
+    "counts": {
+      "test": 12,
+      "train": 51,
+      "val": 12
+    },
+    "lead_table_9": false,
+    "method": "stratified by meeting-series prefix; SHA-256 order within each series",
+    "seed": "icsi-mrda-split-v1"
+  },
+  "version": "v1"
+}
