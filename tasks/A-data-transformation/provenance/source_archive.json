@@ -1,0 +1,6 @@
+{
+  "source": "ICSI Core NXT release",
+  "raw_root": "data/raw/icsi_core_nxt",
+  "archive_sha256": null,
+  "limitation": "The working tree contains the extracted release, not the original archive; an archive SHA-256 cannot be verified here."
+}
