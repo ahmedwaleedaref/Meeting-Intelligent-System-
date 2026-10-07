@@ -46,7 +46,8 @@ replacement policy, not the unavailable Table 9 list.
 
 ## C3 release files
 
-`data/v1/` contains exactly these five files:
+Each `data/vN/` release directory (for example `data/v1/` or `data/v2/`)
+contains exactly these five files:
 
 - `rows.jsonl`: every C2 row unchanged, with `split` and `fold` appended.
   Train and validation folds are integers in `[0, k)`; test folds are `null`.
@@ -55,21 +56,23 @@ replacement policy, not the unavailable Table 9 list.
   meeting ID to `{ "split": ..., "fold": ... }`, and the SHA-256 of the
   committed `tasks/A-data-transformation/provenance/split_v1.json` as
   `source_sha256`.
-- `metadata.json`: release version and dataset provenance/statistics. It has
-  `data_version: "v1"`, `schema_version`, the source archive name/release/SHA-256,
+- `metadata.json`: release version and dataset provenance/statistics. Its
+  `data_version` matches the release directory (`v1`, `v2`, ...); it also has
+  `schema_version`, the source archive name/release/SHA-256,
   row counts by split and label, link counts by status, quality-flag counts,
   the chosen D1–D16 defaults, and CC BY 4.0 attribution. It has no build
   timestamp, commit, machine path, or host.
 - `checksums.sha256`: SHA-256 entries for the other four files only, sorted by
   filename. Each line is `<64 lowercase hex characters><two spaces><filename>`.
 
-After a real build, `tasks/A-data-transformation/provenance/release_v1.json`
+After a real build, `tasks/A-data-transformation/provenance/release_vN.json`
 records the release fingerprint, hashes for the five release files, and hashes
-for the C2 rows, C2 links, split, source archive metadata, and decision-default
-inputs. Fixture dry runs do not write this record.
+for the C2 rows, C2 links, split, source archive metadata, decision-default,
+and any additional provenance inputs. Fixture dry runs do not write this record.
 
 The release loader verifies this exact file set and all four checksums before
-validating the row, link, and split contracts. It rejects duplicate segment
+validating the row, link, and split contracts. It accepts version labels such
+as `v1` and `v2`. It rejects duplicate segment
 IDs, unknown labels, inconsistent meeting assignments, missing train/validation
 folds, unresolved link IDs, and error-class quality flags. Each
 `is_layer2_proposal` row must have exactly one link record, and no ineligible

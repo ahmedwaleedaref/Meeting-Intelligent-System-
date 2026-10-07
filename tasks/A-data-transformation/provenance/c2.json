@@ -1,6 +1,7 @@
 {
   "dataset_stage": "C2",
-  "status": "input_files_validated;_task2_regeneration_unavailable",
+  "status": "historical_v1_inputs;_task2_regeneration_unavailable",
+  "note": "These fingerprints identify the C2 files used for frozen v1. The original files at the recorded interim paths have since been replaced by an updated Task 2 export; see c2_v2_completion.json for the v2 inputs and completion record.",
   "rows": {
     "path": "data/interim/annotated/rows.jsonl",
     "sha256": "cce142e5a64fbf292b371cae4a314386a297b047a3ab33cbb7bb50ca5f5e8d89",

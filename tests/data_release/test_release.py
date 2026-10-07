@@ -11,6 +11,7 @@ from smi.data.release import (
     validate_release_content,
 )
 from smi.data.splits import build_split_provenance
+from scripts.complete_c2_rows import complete_rows
 from scripts.make_release import make_release
 
 
@@ -247,6 +248,13 @@ class ReleaseBuilderTests(unittest.TestCase):
             c2_row.pop("fold")
             c2_rows.append(c2_row)
 
+        c2_rows[0]["general_tags"] = ["z"]
+        c2_rows[0].pop("is_nonspeech")
+        c2_rows[0].pop("is_empty")
+        c2_rows[1]["text"] = ""
+        c2_rows[1].pop("is_nonspeech")
+        c2_rows[1].pop("is_empty")
+
         split_provenance = build_split_provenance(
             ["m1"],
             {"train": ["m1"], "val": [], "test": []},
@@ -332,6 +340,12 @@ class ReleaseBuilderTests(unittest.TestCase):
                 provenance_path=provenance_path,
             )
 
+            release = load_release(final_output)
+            self.assertTrue(release.rows[0]["is_nonspeech"])
+            self.assertFalse(release.rows[0]["is_empty"])
+            self.assertFalse(release.rows[1]["is_nonspeech"])
+            self.assertTrue(release.rows[1]["is_empty"])
+
             provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
             self.assertEqual(provenance["release_fingerprint"], release_fingerprint)
             self.assertEqual(
@@ -345,6 +359,25 @@ class ReleaseBuilderTests(unittest.TestCase):
                 },
             )
 
+            second_version = root / "v2"
+            completion_provenance = root / "c2_completion.json"
+            completion_provenance.write_text('{"fixture": true}\n', encoding="utf-8")
+            second_provenance = root / "release_v2.json"
+            make_release(
+                c2_rows_path,
+                c2_links_path,
+                split_path,
+                source_path,
+                decisions_path,
+                second_version,
+                provenance_path=second_provenance,
+                data_version="v2",
+                provenance_inputs=(completion_provenance,),
+            )
+            self.assertEqual(load_release(second_version).metadata["data_version"], "v2")
+            version_two_record = json.loads(second_provenance.read_text(encoding="utf-8"))
+            self.assertIn("c2_completion.json", version_two_record["input_sha256"])
+
     def test_dry_run_cannot_target_v1_directory(self):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaisesRegex(ValueError, "temporary directory"):
@@ -357,6 +390,67 @@ class ReleaseBuilderTests(unittest.TestCase):
                     Path(directory) / "v1",
                     dry_run=True,
                 )
+
+
+class C2CompletionTests(unittest.TestCase):
+    def test_backfills_only_nonproposal_rows_matching_frozen_release(self):
+        rows, links, _ = valid_content()
+        c1_rows = [dict(row) for row in rows]
+        previous_rows = []
+        for row in rows:
+            previous = dict(row)
+            previous["split"] = "train"
+            previous["fold"] = 0
+            previous["is_nonlabeled"] = row["seg_id"] == "m1-r"
+            previous_rows.append(previous)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            previous_dir = root / "previous"
+            previous_dir.mkdir()
+            previous_rows_path = previous_dir / "rows.jsonl"
+            previous_rows_path.write_text(
+                "".join(json.dumps(row) + "\n" for row in previous_rows),
+                encoding="utf-8",
+            )
+            (previous_dir / "checksums.sha256").write_text("fixture\n", encoding="ascii")
+
+            task2_rows_path = root / "task2_rows.jsonl"
+            partial_task2_row = dict(rows[0])
+            partial_task2_row.pop("is_nonspeech")
+            partial_task2_row.pop("is_empty")
+            task2_rows_path.write_text(json.dumps(partial_task2_row) + "\n", encoding="utf-8")
+            c1_rows_path = root / "c1_rows.jsonl"
+            c1_rows_path.write_text(
+                "".join(json.dumps(row) + "\n" for row in c1_rows),
+                encoding="utf-8",
+            )
+            links_path = root / "links.jsonl"
+            links_path.write_text(json.dumps(links[0]) + "\n", encoding="utf-8")
+            output_path = root / "completed" / "rows.jsonl"
+            provenance_path = root / "provenance.json"
+
+            backfilled = complete_rows(
+                task2_rows_path,
+                previous_rows_path,
+                c1_rows_path,
+                links_path,
+                output_path,
+                provenance_path,
+            )
+
+            completed = [json.loads(line) for line in output_path.read_text(encoding="utf-8").splitlines()]
+            self.assertEqual(backfilled, 1)
+            self.assertEqual([row["seg_id"] for row in completed], ["m1-p", "m1-r"])
+            self.assertFalse(completed[0]["is_nonlabeled"])
+            self.assertTrue(completed[1]["is_nonlabeled"])
+            self.assertFalse(completed[0]["is_nonspeech"])
+            self.assertFalse(completed[0]["is_empty"])
+            self.assertNotIn("split", completed[1])
+            self.assertEqual(
+                json.loads(provenance_path.read_text(encoding="utf-8"))["output"]["backfilled_rows"],
+                1,
+            )
 
 
 if __name__ == "__main__":

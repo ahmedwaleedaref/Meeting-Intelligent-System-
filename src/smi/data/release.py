@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -78,7 +79,7 @@ _WORD_FIELDS = {"text", "kind", "start", "end"}
 
 @dataclass(frozen=True)
 class ReleaseData:
-    """Validated release contents loaded from a ``data/v1`` directory."""
+    """Validated release contents loaded from a versioned ``data/vN`` directory."""
 
     rows: tuple[dict[str, Any], ...]
     links: tuple[dict[str, Any], ...]
@@ -433,7 +434,7 @@ def validate_release_content(
 
 
 def load_release(directory: str | Path) -> ReleaseData:
-    """Load, checksum-verify, and validate a complete ``data/v1`` release."""
+    """Load, checksum-verify, and validate a complete versioned release."""
     root = Path(directory)
     if not root.is_dir():
         raise ValueError(f"release directory does not exist: {root}")
@@ -452,8 +453,9 @@ def load_release(directory: str | Path) -> ReleaseData:
     links = _read_jsonl(root / "links.jsonl")
     splits = _read_json(root / "splits.json")
     metadata = _read_json(root / "metadata.json")
-    if metadata.get("data_version") != "v1":
-        raise ValueError("metadata.data_version must be 'v1'")
+    data_version = metadata.get("data_version")
+    if not isinstance(data_version, str) or not re.fullmatch(r"v[1-9][0-9]*", data_version):
+        raise ValueError("metadata.data_version must be a version such as 'v1' or 'v2'")
     validate_release_content(rows, links, splits)
     return ReleaseData(tuple(rows), tuple(links), splits, metadata)
 

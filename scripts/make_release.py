@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -29,6 +30,8 @@ def make_release(
     *,
     dry_run: bool = False,
     provenance_path: str | Path | None = None,
+    data_version: str = "v1",
+    provenance_inputs: Sequence[str | Path] = (),
 ) -> str:
     """Validate C2 inputs and write the five files for a C3 release.
 
@@ -36,8 +39,10 @@ def make_release(
     temporary directory. The committed provenance files remain untouched.
     """
     output = Path(output_path)
-    if dry_run and output.name.lower() == "v1":
-        raise ValueError("a dry run must use a temporary directory, not data/v1")
+    if not re.fullmatch(r"v[1-9][0-9]*", data_version):
+        raise ValueError("data_version must look like v1, v2, and so on")
+    if dry_run and output.name.lower() == data_version.lower():
+        raise ValueError("a dry run must use a temporary directory, not a release directory")
     if output.exists() and any(output.iterdir()):
         raise ValueError(f"output directory must be empty: {output}")
 
@@ -52,10 +57,11 @@ def make_release(
     _validate_decisions(decisions)
 
     splits = _make_release_splits(split_provenance, split_bytes)
+    rows = _add_required_context_flags(rows)
     rows = attach_split_info(rows, split_provenance)
     validate_release_content(rows, links, splits)
 
-    metadata = _make_metadata(rows, links, source_archive, decisions)
+    metadata = _make_metadata(rows, links, source_archive, decisions, data_version)
     content = {
         "rows.jsonl": _jsonl_text(rows),
         "links.jsonl": _jsonl_text(links),
@@ -84,10 +90,39 @@ def make_release(
             provenance_path,
             fingerprint,
             output,
-            (rows_path, links_path, split_path, source_path, decisions_path),
+            (
+                rows_path,
+                links_path,
+                split_path,
+                source_path,
+                decisions_path,
+                *provenance_inputs,
+            ),
+            data_version,
         )
 
     return fingerprint
+
+
+def _add_required_context_flags(
+    rows: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Fill D5 flags when an upstream C2 export does not include them."""
+    normalized_rows = []
+    for row in rows:
+        normalized = dict(row)
+        if "is_nonspeech" not in normalized:
+            general_tags = normalized.get("general_tags", [])
+            if not isinstance(general_tags, list):
+                general_tags = []
+            normalized["is_nonspeech"] = any(
+                tag in {"z", "x"} for tag in general_tags
+            )
+        if "is_empty" not in normalized:
+            text = normalized.get("text")
+            normalized["is_empty"] = isinstance(text, str) and text == ""
+        normalized_rows.append(normalized)
+    return normalized_rows
 
 
 def _write_release_provenance(
@@ -95,6 +130,7 @@ def _write_release_provenance(
     fingerprint: str,
     release_path: Path,
     input_paths: Sequence[str | Path],
+    data_version: str,
 ) -> None:
     output_files = {}
     for filename in sorted(CONTENT_FILES + ("checksums.sha256",)):
@@ -106,7 +142,7 @@ def _write_release_provenance(
         input_files[path.name] = _sha256_file(path)
 
     record = {
-        "data_version": "v1",
+        "data_version": data_version,
         "release_fingerprint": fingerprint,
         "input_sha256": input_files,
         "release_files_sha256": output_files,
@@ -151,6 +187,7 @@ def _make_metadata(
     links: Sequence[Mapping[str, Any]],
     source_archive: Mapping[str, Any],
     decisions: Mapping[str, Any],
+    data_version: str,
 ) -> dict[str, Any]:
     split_counts = {"train": 0, "val": 0, "test": 0}
     label_counts = {}
@@ -171,7 +208,7 @@ def _make_metadata(
         link_counts[link["status"]] += 1
 
     return {
-        "data_version": "v1",
+        "data_version": data_version,
         "schema_version": "1.0",
         "source_archive": {
             "archive_name": source_archive["archive_name"],
@@ -280,17 +317,23 @@ def _sha256_file(path: Path) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Build and validate the C3 data/v1 release.")
+    parser = argparse.ArgumentParser(description="Build and validate a versioned C3 release.")
     parser.add_argument("--rows", required=True, help="C2 annotated rows.jsonl")
     parser.add_argument("--links", required=True, help="C2 links.jsonl")
     parser.add_argument("--splits", required=True, help="provenance/split_v1.json")
     parser.add_argument("--source", required=True, help="provenance/source_archive.json")
     parser.add_argument("--decisions", required=True, help="JSON object containing D1 through D16")
-    parser.add_argument("--output", default="data/v1", help="release output directory")
+    parser.add_argument("--output", help="release output directory (defaults to data/<version>)")
+    parser.add_argument("--version", default="v1", help="release version (for example v1 or v2)")
+    parser.add_argument(
+        "--provenance-input",
+        action="append",
+        default=[],
+        help="additional file to fingerprint in release provenance (repeatable)",
+    )
     parser.add_argument(
         "--provenance",
-        default="tasks/A-data-transformation/provenance/release_v1.json",
-        help="release fingerprint record (skipped for dry runs)",
+        help="release fingerprint record (defaults to release_<version>.json)",
     )
     parser.add_argument(
         "--dry-run",
@@ -298,6 +341,10 @@ def main() -> None:
         help="build a fixture release; use a temporary output directory",
     )
     args = parser.parse_args()
+    output_path = args.output or f"data/{args.version}"
+    provenance_path = args.provenance or (
+        f"tasks/A-data-transformation/provenance/release_{args.version}.json"
+    )
 
     fingerprint = make_release(
         args.rows,
@@ -305,9 +352,11 @@ def main() -> None:
         args.splits,
         args.source,
         args.decisions,
-        args.output,
+        output_path,
         dry_run=args.dry_run,
-        provenance_path=args.provenance,
+        provenance_path=provenance_path,
+        data_version=args.version,
+        provenance_inputs=args.provenance_input,
     )
     print(f"Release fingerprint: {fingerprint}")
 
