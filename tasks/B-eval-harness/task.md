@@ -6,11 +6,12 @@ Scope for now: utterance classification only (layer 1). The harness evaluates a 
 |---|---|
 | B1 Prediction schema | to do now |
 | B2 Layer-1 metrics | to do now |
-| B3 Layer-2 metrics | deferred: linking only matters once utterances are classified well |
-| B4 Uncertainty (bootstrap) | deferred: needs formalisation first |
-| B5 CV runner | deferred: only if the standard split proves too noisy |
-| B6 Results log | deferred to the baseline phase |
-| B7 Error analysis | removed: becomes its own task |
+| B3 Tests | to do now |
+| B4 Layer-2 metrics | deferred: linking only matters once utterances are classified well |
+| B5 Uncertainty (bootstrap) | deferred: needs formalisation first |
+| B6 CV runner | deferred: only if the standard split proves too noisy |
+| B7 Results log | deferred to the baseline phase |
+| B8 Error analysis | removed: becomes its own task |
 
 ---
 
@@ -81,13 +82,7 @@ Scope for now: utterance classification only (layer 1). The harness evaluates a 
  "pr_auc": null}
 ```
 
-**Tests** (required before anyone uses the harness):
-- perfect predictions → every F1 = 1.0;
-- all `other` → macro-F1 (6) = 0.0;
-- a hand-built toy file with known answers (e.g. 3 meetings, 20 segments) → exact expected values;
-- oracle test: mislabel segments by hand, compute F1 by hand, and check the pipeline's F1 matches;
-- every number cross-checked against `sklearn.metrics` on random predictions;
-- every validation failure in B1 raises an error.
+**Tests:** see B3.
 
 **Deliverables:** to be designed by the task owner.
 
@@ -99,22 +94,52 @@ Scope for now: utterance classification only (layer 1). The harness evaluates a 
 
 ---
 
-## B3. Layer-2 metrics — deferred
+## B3. Tests
+
+**Goal:** prove the harness (B1 + B2) is correct before anyone uses its numbers. Tests are written from this document, not from the code.
+
+**Rules:**
+- Each test is described here first (what it checks, input, expected result), then implemented.
+- Tests live in `tests/eval/` and run with `PYTHONPATH=src pytest tests/eval`.
+- Tests that need the frozen release skip, never fail, when the data is not available locally.
+
+**Tests** (required before anyone uses the harness):
+- [ ] perfect predictions → every F1 = 1.0;
+- [ ] all `other` → macro-F1 (6) = 0.0;
+- [ ] a hand-built toy file with known answers (e.g. 3 meetings, 20 segments) → exact expected values;
+- [ ] oracle test: mislabel segments by hand, compute F1 by hand, and check the pipeline's F1 matches;
+- [ ] every number cross-checked against `sklearn.metrics` on random predictions;
+- [ ] every validation failure in B1 raises an error.
+
+**Test descriptions:**
+
+**T1. Perfect predictions.** A sanity check for major bugs in the metrics code.
+- Input: gold labels loaded with `load_gold`, used as the predictions too (each wrapped as `{"label": ..., "scores": None}`).
+- Expected: P = R = F1 = 1.0 for every class that occurs in the gold; a class with zero support gets 0 (by the zero-support decision), not 1.
+- Note: one meeting does not always contain all 7 classes; every split does.
+
+**T2. All `other`.** A model that always predicts `other` must score 0 on the primary metric.
+- Input: gold labels loaded with `load_gold`; every prediction set to `other`.
+- Expected: macro-F1 (6) = 0.0, and P = R = F1 = 0 for each of the 6 target classes.
+
+---
+
+## B4. Layer-2 metrics — deferred
 
 Per-proposal link accuracy and pair-level P/R/F1. Revisit once layer 1 works.
 
-## B4. Uncertainty — deferred
+## B5. Uncertainty — deferred
 
 Meeting-level (cluster) bootstrap CIs and paired bootstrap for model comparisons. Before implementing: formalise the method (Koehn 2004; Dror et al. 2018), and check empirically that the intervals are not too narrow with only 12 clusters.
 
-## B5. CV runner — deferred
+## B6. CV runner — deferred
 
 Grouped K-fold over train + val meetings, out-of-fold predictions, test only in final mode. Trigger: adopt it if results on the standard split prove too noisy to decide between configs, e.g. seed-to-seed spread on validation for `cc`/`co` is as large as the differences being compared.
 
-## B6. Results log — deferred to the baseline phase
+## B7. Results log — deferred to the baseline phase
 
 Tool choice (W&B vs CSV + collect script), seeds per config.
 
-## B7. Error analysis — removed
+## B8. Error analysis — removed
 
 Becomes its own task.

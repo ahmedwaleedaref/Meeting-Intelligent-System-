@@ -7,3 +7,21 @@ Graduation project on dialogue-act tagging and proposal-response linking over th
 | ID | Task | Owner | Status |
 |----|------|-------|--------|
 | [B](tasks/B-eval-harness/README.md) | Evaluation harness | Ahmed | in progress |
+
+## Setup
+
+```bash
+pip install -r requirements.txt
+```
+
+## Running the tests
+
+From the repo root:
+
+```bash
+python -m pytest tests -v          # every test, one line each
+python -m pytest tests -q          # short summary
+python -m pytest tests -v -rs      # also show why tests were skipped
+```
+
+Tests that need local data (`data/`, not in git) are skipped, not failed, when the data is missing.

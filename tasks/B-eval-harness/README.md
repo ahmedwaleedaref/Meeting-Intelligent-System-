@@ -14,11 +14,12 @@ In progress. Next step: owner proposes the code layout and function signatures (
 |---|---|
 | B1 Prediction schema | in progress |
 | B2 Layer-1 metrics | in progress |
-| B3 Layer-2 metrics | deferred: linking only matters once utterances are classified well |
-| B4 Uncertainty (bootstrap) | deferred: needs formalisation first (Koehn 2004; Dror et al. 2018) |
-| B5 CV runner | deferred: only if the standard split proves too noisy |
-| B6 Results log | deferred to the baseline phase |
-| B7 Error analysis | removed: becomes its own task |
+| B3 Tests | in progress |
+| B4 Layer-2 metrics | deferred: linking only matters once utterances are classified well |
+| B5 Uncertainty (bootstrap) | deferred: needs formalisation first (Koehn 2004; Dror et al. 2018) |
+| B6 CV runner | deferred: only if the standard split proves too noisy |
+| B7 Results log | deferred to the baseline phase |
+| B8 Error analysis | removed: becomes its own task |
 
 Roles: design + implementation (owner), tests (one member, written from task.md), code review (one member, §5 of PROTOCOL).
 
