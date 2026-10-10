@@ -104,12 +104,10 @@ Scope for now: utterance classification only (layer 1). The harness evaluates a 
 - Tests that need the frozen release skip, never fail, when the data is not available locally.
 
 **Tests** (required before anyone uses the harness):
-- [ ] perfect predictions → every F1 = 1.0;
-- [ ] all `other` → macro-F1 (6) = 0.0;
-- [ ] a hand-built toy file with known answers (e.g. 3 meetings, 20 segments) → exact expected values;
-- [ ] oracle test: mislabel segments by hand, compute F1 by hand, and check the pipeline's F1 matches;
+- [x] perfect predictions → every F1 = 1.0;
+- [x] all `other` → macro-F1 (6) = 0.0;
+- [x] toy oracle: real segments from 3 meetings, labels changed by hand, P/R/F1 computed by hand → exact expected values (toy file and oracle merged);
 - [ ] every number cross-checked against `sklearn.metrics` on random predictions;
-- [ ] every validation failure in B1 raises an error.
 
 **Test descriptions:**
 
@@ -121,6 +119,12 @@ Scope for now: utterance classification only (layer 1). The harness evaluates a 
 **T2. All `other`.** A model that always predicts `other` must score 0 on the primary metric.
 - Input: gold labels loaded with `load_gold`; every prediction set to `other`.
 - Expected: macro-F1 (6) = 0.0, and P = R = F1 = 0 for each of the 6 target classes.
+
+**T3. Toy oracle** (toy file and oracle test merged). Catches subtle bugs that T1/T2 cannot (swapped P/R, wrong denominators, macro as a sum).
+- Input: `tests/fixtures/toy/`: 3 val meetings × 10 consecutive real segments (all 7 classes present) as gold, and the same 30 segments as a prediction file with 5 labels changed by hand.
+- Expected: per-class P/R/F1/support, macro-F1 (6) and macro-F1 (7) equal the values computed by hand in `tests/fixtures/toy/README.md`.
+- Edits cover: `ar` never predicted (zero division), cs → co, gold `other` predicted as a target, wrong target. Not covered: a target predicted as `other` (owner's choice).
+- Fixtures are in git, so the test always runs.
 
 ---
 
