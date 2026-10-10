@@ -8,18 +8,17 @@ Success = `evaluate(pred_path, split)` writes a correct `metrics.json`, verified
 Full task description (schema, validation, metrics, output layout, tests): [task.md](task.md).
 
 ## Status
-In progress. Next step: owner proposes the code layout and function signatures (the Deliverables in task.md); team reviews them before implementation.
+Layer-1 harness done for the current scope: prediction schema (B1), metrics (B2) and tests (B3). Next: `evaluate()` (load predictions + gold, test-split flag, write `metrics.json`), written in the baseline phase once `scripts/run.py` exists.
 
 | Sub-task | Status |
 |---|---|
-| B1 Prediction schema | in progress |
-| B2 Layer-1 metrics | in progress |
+| B1 Prediction schema | done: coverage enforced by the seg_id check in the metrics |
+| B2 Layer-1 metrics | metrics done; `evaluate()` deferred to the baseline phase |
 | B3 Tests | done |
 | B4 Layer-2 metrics | deferred: linking only matters once utterances are classified well |
 | B5 Uncertainty (bootstrap) | deferred: needs formalisation first (Koehn 2004; Dror et al. 2018) |
 | B6 CV runner | deferred: only if the standard split proves too noisy |
 | B7 Results log | deferred to the baseline phase |
-| B8 Error analysis | removed: becomes its own task |
 
 Roles: design + implementation (owner), tests (one member, written from task.md), code review (one member, §5 of PROTOCOL).
 
@@ -38,13 +37,14 @@ Roles: design + implementation (owner), tests (one member, written from task.md)
 - Evaluating `test` requires an explicit flag recorded in the output — PROTOCOL §7.
 - `seg_id` uniqueness is guaranteed by the data side (task A); the harness only rejects duplicates inside a prediction file — the harness checks files, not the corpus.
 - A prediction file is all-scores or all-null, never mixed; only prompting outputs may be null — a mixed file means a broken pipeline.
-- Coverage check against the split's gold IDs (missing / extra) deferred until the gold loader exists (A10) — nothing to check against yet.
+- Coverage (missing / extra seg_ids vs the split) is enforced by `per_class_metrics` / `confusion_matrix`, which raise if prediction and gold IDs differ — no separate check needed.
+- A target class with zero gold support counts as F1 = 0; macro-F1 always divides by the full class count (6 or 7) — a class is never silently dropped.
+- PR-AUC deferred until the first score-producing model exists — nothing to compute it on yet.
+- `evaluate()` deferred to the baseline phase — its interface depends on how `run.py` calls it.
 
 ### Open
 - [ ] Must `label` agree with argmax of `scores`? Not enforced for now; revisit with the first baseline outputs.
-- [ ] Target class with zero gold support in a split: counts as F1 = 0 in macro-F1 (6), or excluded? Proposed: count it as 0 and report support.
-- [ ] PR-AUC from day 1 or later? Proposed: day 1 (`average_precision_score`), `null` when no scores or no positives.
-- [ ] Source of `data_version` in `metrics.json`: proposed: frozen dataset metadata, not a function argument.
+- [ ] Source of `data_version` in `metrics.json`: proposed: `source.json` of the per-meeting files (copied from the release metadata). Settle with `evaluate()`.
 
 ## Experiments
 The harness is shared code (`src/smi/eval/`), so this task is not expected to have experiments.

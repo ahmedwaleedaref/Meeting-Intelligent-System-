@@ -4,14 +4,13 @@ Scope for now: utterance classification only (layer 1). The harness evaluates a 
 
 | Task | Status |
 |---|---|
-| B1 Prediction schema | to do now |
-| B2 Layer-1 metrics | to do now |
+| B1 Prediction schema | done |
+| B2 Layer-1 metrics | metrics done; `evaluate()` deferred to the baseline phase |
 | B3 Tests | done |
 | B4 Layer-2 metrics | deferred: linking only matters once utterances are classified well |
 | B5 Uncertainty (bootstrap) | deferred: needs formalisation first |
 | B6 CV runner | deferred: only if the standard split proves too noisy |
 | B7 Results log | deferred to the baseline phase |
-| B8 Error analysis | removed: becomes its own task |
 
 ---
 
@@ -90,7 +89,7 @@ Scope for now: utterance classification only (layer 1). The harness evaluates a 
 - [x] Primary metric = macro-F1 over the 6 target classes, excluding `other`.
 - [x] Drop the 3-class level and `cs` + `co` pooled for now: the 3-class representation will most likely not be kept.
 - [x] Harness is threshold-free (argmax).
-- [ ] Is PR-AUC worth computing from day 1, or added when the first score-producing model exists?
+- [x] PR-AUC deferred until the first score-producing model exists.
 
 ---
 
@@ -149,7 +148,3 @@ Grouped K-fold over train + val meetings, out-of-fold predictions, test only in 
 ## B7. Results log — deferred to the baseline phase
 
 Tool choice (W&B vs CSV + collect script), seeds per config.
-
-## B8. Error analysis — removed
-
-Becomes its own task.
