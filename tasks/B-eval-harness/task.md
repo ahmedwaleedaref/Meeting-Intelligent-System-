@@ -6,7 +6,7 @@ Scope for now: utterance classification only (layer 1). The harness evaluates a 
 |---|---|
 | B1 Prediction schema | to do now |
 | B2 Layer-1 metrics | to do now |
-| B3 Tests | to do now |
+| B3 Tests | done |
 | B4 Layer-2 metrics | deferred: linking only matters once utterances are classified well |
 | B5 Uncertainty (bootstrap) | deferred: needs formalisation first |
 | B6 CV runner | deferred: only if the standard split proves too noisy |
@@ -107,7 +107,7 @@ Scope for now: utterance classification only (layer 1). The harness evaluates a 
 - [x] perfect predictions → every F1 = 1.0;
 - [x] all `other` → macro-F1 (6) = 0.0;
 - [x] toy oracle: real segments from 3 meetings, labels changed by hand, P/R/F1 computed by hand → exact expected values (toy file and oracle merged);
-- [ ] every number cross-checked against `sklearn.metrics` on random predictions;
+- [x] every number cross-checked against `sklearn.metrics` (synthetic and real splits);
 
 **Test descriptions:**
 
@@ -125,6 +125,12 @@ Scope for now: utterance classification only (layer 1). The harness evaluates a 
 - Expected: per-class P/R/F1/support, macro-F1 (6) and macro-F1 (7) equal the values computed by hand in `tests/fixtures/toy/README.md`.
 - Edits cover: `ar` never predicted (zero division), cs → co, gold `other` predicted as a target, wrong target. Not covered: a target predicted as `other` (owner's choice).
 - Fixtures are in git, so the test always runs.
+
+**T4. sklearn cross-check.** Every number the harness produces must equal `sklearn.metrics` (with `zero_division=0`).
+- Compared: per-class P/R/F1/support, macro-F1 (6) and (7), confusion matrix, row-normalised confusion matrix.
+- Synthetic (always runs): random MRDA-like gold, 15 and 500 segments × 3 seeds; the 15-segment runs leave classes absent (zero-division paths).
+- Real (skipped without `data/v4_meetings`): `train` and `val` gold, predictions made from gold with a fixed seed at 30 %, 60 % and 90 % accuracy.
+- scikit-learn is a required dependency; a missing install fails the tests instead of skipping them.
 
 ---
 

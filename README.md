@@ -11,6 +11,8 @@ Graduation project on dialogue-act tagging and proposal-response linking over th
 ## Setup
 
 ```bash
+python3 -m venv .venv               # once
+source .venv/bin/activate           # in every new terminal
 pip install -r requirements.txt
 ```
 

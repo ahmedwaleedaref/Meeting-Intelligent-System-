@@ -7,12 +7,14 @@ when the folder is missing. The toy tests in test_layer1_metrics.py always run.
 Run from the repo root:   python -m pytest tests/eval/test_real_data.py -v
 """
 
+import random
 from pathlib import Path
 
 import pytest
+import sklearn.metrics as sk
 
 from smi.eval.gold import load_gold
-from smi.eval.layer1_metrics import macro_f1_6, macro_f1_7, per_class_metrics
+from smi.eval.layer1_metrics import confusion_matrix, macro_f1_6, macro_f1_7, per_class_metrics, row_normalised
 from smi.eval.prediction_schema import load_predictions
 from smi.labels import LABELS, TARGET_LABELS
 
@@ -97,3 +99,59 @@ def test_toy_oracle():
         assert metrics[label] == pytest.approx(TOY_EXPECTED[label]), label  # on failure, the class name is shown
     assert macro_f1_6(metrics) == pytest.approx(TOY_MACRO_F1_6)
     assert macro_f1_7(metrics) == pytest.approx(TOY_MACRO_F1_7)
+
+
+# ---------------------------------------------------------------------------
+# T4: every number cross-checked against sklearn.metrics on the real splits.
+# Predictions are made from gold with a fixed seed: right with probability `accuracy`,
+# otherwise a different label at random. Never run on test (PROTOCOL §7).
+# The synthetic version (random gold) is test_matches_sklearn in test_layer1_metrics.py.
+# ---------------------------------------------------------------------------
+
+def noisy_predictions(gold: dict[str, str], accuracy: float, seed: int) -> dict[str, str]:
+    rng = random.Random(seed)  # fixed seed -> same predictions every run, failures can be reproduced
+    pred = {}
+    for seg_id, label in gold.items():
+        if rng.random() < accuracy:
+            pred[seg_id] = label
+        else:
+            pred[seg_id] = rng.choice([other for other in LABELS if other != label])
+    return pred
+
+
+@needs_data
+@pytest.mark.parametrize("accuracy", [0.3, 0.6, 0.9])
+@pytest.mark.parametrize("split", ["train", "val"])
+def test_matches_sklearn_on_real_split(split, accuracy):
+    gold = load_gold(MEETINGS_DIR / split)
+    pred = noisy_predictions(gold, accuracy, seed=0)
+    seg_ids = list(gold)  # one fixed order, used to build sklearn's two aligned lists
+    y_true = [gold[s] for s in seg_ids]
+    y_pred = [pred[s] for s in seg_ids]
+
+    ours = per_class_metrics(as_records(pred), gold)
+
+    # per-class P / R / F1 / support
+    p, r, f1, support = sk.precision_recall_fscore_support(
+        y_true, y_pred, labels=list(LABELS), average=None, zero_division=0
+    )
+    for i, label in enumerate(LABELS):
+        assert ours[label]["p"] == pytest.approx(p[i]), label
+        assert ours[label]["r"] == pytest.approx(r[i]), label
+        assert ours[label]["f1"] == pytest.approx(f1[i]), label
+        assert ours[label]["support"] == support[i], label
+
+    # macro-F1 over the 6 targets and over all 7 classes
+    assert macro_f1_6(ours) == pytest.approx(
+        sk.f1_score(y_true, y_pred, labels=list(TARGET_LABELS), average="macro", zero_division=0)
+    )
+    assert macro_f1_7(ours) == pytest.approx(
+        sk.f1_score(y_true, y_pred, labels=list(LABELS), average="macro", zero_division=0)
+    )
+
+    # confusion matrix (rows = gold, columns = predicted) and its row-normalised form
+    ours_counts = confusion_matrix(as_records(pred), gold)
+    assert ours_counts == sk.confusion_matrix(y_true, y_pred, labels=list(LABELS)).tolist()
+    sk_normalised = sk.confusion_matrix(y_true, y_pred, labels=list(LABELS), normalize="true").tolist()
+    for ours_row, sk_row in zip(row_normalised(ours_counts), sk_normalised):
+        assert ours_row == pytest.approx(sk_row)

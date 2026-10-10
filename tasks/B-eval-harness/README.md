@@ -14,7 +14,7 @@ In progress. Next step: owner proposes the code layout and function signatures (
 |---|---|
 | B1 Prediction schema | in progress |
 | B2 Layer-1 metrics | in progress |
-| B3 Tests | in progress |
+| B3 Tests | done |
 | B4 Layer-2 metrics | deferred: linking only matters once utterances are classified well |
 | B5 Uncertainty (bootstrap) | deferred: needs formalisation first (Koehn 2004; Dror et al. 2018) |
 | B6 CV runner | deferred: only if the standard split proves too noisy |

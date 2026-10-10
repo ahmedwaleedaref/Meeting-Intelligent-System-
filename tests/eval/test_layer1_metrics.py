@@ -16,6 +16,7 @@ import json
 import random 
 
 import pytest 
+import sklearn.metrics as sk  # required (requirements.txt): a missing sklearn must fail, not skip
 
 from smi.eval.layer1_metrics import (  
     confusion_matrix, 
@@ -280,7 +281,7 @@ def test_target_labels_are_labels_without_other():
 
 # ---------------------------------------------------------------------------
 # test 5: every number cross-checked against sklearn.metrics on random predictions.
-# Needs scikit-learn installed; if it is missing, pytest shows these tests as SKIPPED (not passed).
+# Needs scikit-learn (requirements.txt); it is imported at the top, so a missing install fails loudly.
 # Sizes: 15 segments (some classes absent -> tests the zero-division cases) and 500 segments.
 # ---------------------------------------------------------------------------
 
@@ -299,7 +300,6 @@ def random_gold_and_pred(n_segments: int, seed: int) -> tuple[dict[str, str], di
 @pytest.mark.parametrize("n_segments", [15, 500])
 @pytest.mark.parametrize("seed", [0, 1, 2])
 def test_matches_sklearn(n_segments, seed):
-    sk = pytest.importorskip("sklearn.metrics")  # skip (with a visible reason) if scikit-learn is not installed
     gold, pred = random_gold_and_pred(n_segments, seed)
     seg_ids = list(gold)  # one fixed order, used to build sklearn's two aligned lists
     y_true = [gold[s] for s in seg_ids]
