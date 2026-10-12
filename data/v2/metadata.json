@@ -1,0 +1,57 @@
+{
+  "counts": {
+    "links_by_status": {
+      "ambiguous": 0,
+      "malformed": 5,
+      "no_pair": 2237,
+      "ok": 1589
+    },
+    "rows_by_label": {
+      "aa": 6339,
+      "ar": 1120,
+      "bk": 7282,
+      "cc": 436,
+      "co": 790,
+      "cs": 3041,
+      "other": 99686
+    },
+    "rows_by_quality_flag": {
+      "no_word_ref": 322,
+      "type_fallback_original": 1,
+      "word_time_missing": 56659
+    },
+    "rows_by_split": {
+      "test": 21012,
+      "train": 80870,
+      "val": 16812
+    },
+    "total_links": 3831,
+    "total_rows": 118694
+  },
+  "data_version": "v2",
+  "defaults": {
+    "D1": "seg_id uses meeting, source channel, and source start/end milliseconds; split parts append _p<part number>; source nite:id is preserved in source_da_id.",
+    "D10": "Project-selected 51 train, 12 validation, and 12 test meetings; stratify by meeting-series prefix with deterministic SHA-256 ordering and seed icsi-mrda-split-v1; assign five meeting-grouped folds over train and validation.",
+    "D11": "Context units are dialogue-act rows; default documented grid is k in {0,1,3,5}; support left-only and symmetric left/right windows; mark the target with [T] and [/T].",
+    "D12": "Order rows by source start, source end, agent, element ordinal, and part index; times compare numerically and agent compares by Unicode code point.",
+    "D13": "Keep every word in the dialogue-act range, including quoted material and quote tokens.",
+    "D14": "Benchmark one response per proposal against all responder chains' first segments; only ok and no_pair records are gold; malformed and ambiguous records are excluded.",
+    "D15": "Keep parser/data-resolution problems in quality_flags; keep annotation-based non-speech and legitimate empty rows separate from errors.",
+    "D16": "Use deterministic UTF-8/LF output, stable ordering and explicit SHA-256 fingerprints; omit build timestamps, commits, hostnames, and machine paths from release files.",
+    "D2": "LABELS is (cs, co, aa, bk, ar, cc, other); aap maps to aa and arp maps to ar.",
+    "D3": "Preserve all mapped target tags in canonical LABELS order; choose the primary multi-target label by cc > co > cs > ar > aa > bk.",
+    "D4": "Bare b maps to other in the primary label; label_bk_merged maps bare b to bk.",
+    "D5": "Keep every row; z/x tags set is_nonspeech; legitimately empty text sets is_empty; error-class rows are not eligible for release; formatter defaults to dropping flagged context units.",
+    "D6": "Store general_tags and disruption_markers for analysis only; never include them in model input.",
+    "D7": "Support raw, relative, and window_letters speaker modes; default context speaker mode is window_letters.",
+    "D8": "Store all responder chains; derive the single-response benchmark policy through D14.",
+    "D9": "Keep disfluencies, fillers, fragments, and original case as present in source text."
+  },
+  "license": "CC BY 4.0",
+  "schema_version": "1.0",
+  "source_archive": {
+    "archive_name": "ICSI_core_NXT.zip",
+    "release": "1.0",
+    "sha256": "cf4860245b9ca9c9ed11a66e5a74cfea2a99a686a52f7580aa0a6bc2225895a9"
+  }
+}

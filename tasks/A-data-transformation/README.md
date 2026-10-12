@@ -1,31 +1,127 @@
 # A — Data transformation
 
-## T1: NXT ingestion
+## Goal
 
-Status: implemented. The current corpus parses cleanly after a documented reconstruction of the missing pipe-preserving transcript record for `Bro003.F.dialogueact12`.
+Build a validated, versioned C3 dataset release from the C2 annotated rows and
+links. Keep meeting-level splits and folds reproducible, and provide a formatter
+that exposes context without leaking gold labels or links into model input.
+
+## Status
+
+**v1 remains frozen; v2 is rebuilt from the updated Task 2 export.** Split
+utilities, context formatting, release loading and validation, and the release
+builder are implemented. The local ICSI Core NXT archive matches the SHA-256
+recorded in [source_archive.json](provenance/source_archive.json). The
+reproducible 51/12/12 meeting split and its five folds are recorded in
+[split_v1.json](provenance/split_v1.json). This is a project-selected
+replacement for the unavailable Table 9 list, not a transcription of that
+list.
+
+The original frozen release remains at `data/v1/` with fingerprint
+`1b8b1fbc27e70c81e5ff7c710380138f1b05db7f2104e174e3a7141e2345c5bb`. The
+updated release is at `data/v2/`, validates with 118,694 rows and 3,831 links,
+and has fingerprint
+`bcf389dd0bee019de4fdca20c270fd083e3c87e7785ee24781291c435d700d3f`. Its
+input/output hashes are in [release_v2.json](provenance/release_v2.json).
+
+The new Task 2 rows export contained 115,874 rows and omitted 2,820 IDs from
+C1. The overlapping rows matched frozen v1 exactly on all fields supplied by
+Task 2. None of the omitted rows was a Layer-2 proposal or had a link, so those
+context rows and omitted annotation fields were recovered from frozen v1 to
+preserve complete meeting streams. The new Task 2 links file was used as
+provided; it changes the responder chain for two proposals in meeting Bro005
+by removing one response segment from each chain. The full completion method
+and all input/output hashes are in
+[c2_v2_completion.json](provenance/c2_v2_completion.json). The Task 2 generator
+is still unavailable, so the source files are fingerprinted but cannot be
+regenerated independently.
+
+Both release folders are versioned on this branch. Their large `rows.jsonl`
+files use Git LFS; teammates can retrieve them with `git lfs pull`. Raw C1/C2
+source inputs remain local and are not included in the branch.
+
+The C1 parser was regenerated from the `A/nxt-parser` branch using the verified
+NXT archive and its transcript inputs. The generated 118,694-row file matches
+the branch's committed C1 fingerprint. See [C1 provenance](provenance/c1.json)
+and the [parse validation report](reports/parse_validation.md).
+
+The plan's expected 321 `no_word_ref` source elements appear as 322 rows because
+`Bed006.A.dialogueact1207` is split into two parts; both parts have no word
+reference. Both releases record 5 malformed link annotations, which remain
+excluded from Layer-2 gold by the schema. The releases use the documented
+D1-D16 defaults. D10 is the user-directed replacement split described above;
+use a future release if the project lead supplies the official Table 9
+assignments.
 
 ## Decisions
 
-- A1 split boundaries require the exact meeting, channel, and source timestamps, an exact transcript/source part-count match, and one unique ordered lexical boundary; reason: ambiguous boundaries must not become fabricated gold data. See [the C1 schema](schema/01_parsed_rows.md#pipe-boundary-acceptance-rule).
-- A1 uses transcript-aligned word boundaries for part timing and proportional timing only when a boundary word lacks usable timing; reason: preserve source timing where available while keeping split spans inside the source act. See [timing methods](schema/01_parsed_rows.md#timing-methods).
-- NXT dialogue-act and word XML remain canonical; transcript text is used only to locate pipe boundaries and is never copied into C1; reason: transcript review must not alter dialogue-act labels or word data.
-- Source token text and case, including disfluencies, fillers, fragments, quotes, and non-`w` content, are preserved; reason: C1 should represent the annotated speech rather than a cleaned transcript.
-- D13 remains pending: the C1 artifact preserves all NXT lexical and non-lexical elements, and downstream ownership must decide how they are presented to models.
-- Transcript-only corrections are recorded in the tracked provenance table and may repair markup, spelling, tokenization, or missing pipe-preserving renderings, but may not rewrite NXT source data; reason: corrections must be reproducible without changing the gold source.
-- The missing `Bro003.F.dialogueact12` transcript record is reconstructed from its canonical NXT lexical word range with the pipe after the initial `Uh`; reason: downstream stages need a usable deterministic split, while the provenance record makes clear that this is a reconstruction rather than recovered original transcript text.
-- Unresolved source records are retained for inspection, marked `ref_unresolved`, reported once per source dialogue act, and make the parser exit non-zero; reason: unresolved data must block a frozen release rather than be silently accepted.
-- The local development environment uses Python 3.11 with dependencies installed from `requirements.txt` into `.venv`; reason: parser and test execution must be reproducible for teammates.
-- Table 5 comparison remains pending because the table is not present in this repository; the measured source counts are recorded in the generated validation report.
+- **D10 — Split and folds:** 51 train, 12 validation, and 12 test meetings;
+  assignment is stratified by meeting-series prefix and ordered by seeded
+  SHA-256 (`icsi-mrda-split-v1`). Folds use the existing deterministic
+  round-robin method over train and validation meetings. This user-directed
+  replacement preserves whole meetings and uses the 51/12/12 size from a
+  [published MRDA setup](https://aclanthology.org/2023.findings-emnlp.505/);
+  it is not the lead's Table 9 membership list. See the
+  [split provenance schema](schema/03_release.md#split-provenance).
 
-## Experiments
+## Create or verify the split
 
-| Number | Question | Result | Conclusion |
-|---|---|---|---|
-| T1-E1 | Does the parser preserve the source structure and produce unique output IDs? | 118,694 generated rows matched the independent pipe-part count; the uniqueness and JSONL round-trip test passed. | The generated C1 structure and deterministic IDs satisfy the current checks. |
-| T1-E2 | Why did parse validation report 17 unresolved source dialogue acts? | All source IDs and word references resolved; six lacked pipe-preserving transcript records and eleven had transcript wording/tokenization that prevented unique alignment. | These were transcript/alignment issues, not neglected dialogue acts or label decisions. |
-| T1-E3 | Can safe transcript-side inconsistencies be corrected without changing NXT data? | Seventeen reviewed corrections are tracked in provenance, including the reconstructed Bro003 record. | Corrections resolve the parse while preserving canonical dialogue-act and word data; the reconstructed record is explicitly documented as synthetic. |
-| T1-E4 | Is the repository environment reproducible? | Python 3.11.9 with `pytest==8.3.4` in `.venv`; the parser test file passes 8 tests. | The documented virtual environment is sufficient for the current parser/test scope. |
+From the repository root, regenerate the same assignment with:
 
-The original 17 cases were retained, not neglected: their NXT dialogue-act IDs and word ranges resolve. Six had no matching pipe-preserving transcript record, and eleven had a transcript record whose wording or tokenization did not give a unique lexical boundary. Seventeen reviewed transcript-only corrections are now tracked in [transcript_corrections.json](provenance/transcript_corrections.json). The `Bro003.F.dialogueact12` record is explicitly reconstructed from canonical NXT lexical words because its original transcript record is absent; it is not presented as recovered source text.
+```powershell
+$env:PYTHONPATH = "src"
+python scripts/make_splits.py
+```
 
-See the [parser usage guide](parser_usage.md), [the NXT concept note](../../concepts/nxt-icsi-annotations.md), [source provenance](provenance/source_archive.json), and the generated `reports/parse_validation.md` after running `python scripts/parse_nxt.py`.
+The input is `data/ICSI-metadata.xml`; the output is
+`tasks/A-data-transformation/provenance/split_v1.json`.
+
+## Verify the code
+
+From the repository root, run the fixture checks with:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m unittest discover -s tests/data_release -v
+```
+
+## Build a release
+
+The build script requires complete C2 rows and links,
+`tasks/A-data-transformation/provenance/split_v1.json`,
+source archive metadata, and a JSON file containing D1 through D16 defaults.
+It validates the inputs, writes five files under `data/vN/`, then records the
+release fingerprint and hashes in `provenance/release_vN.json`. Keep frozen
+release folders unchanged; later data changes get the next version. Use
+`--dry-run` only with fixture inputs and a temporary output directory.
+
+For the current v2 inputs, first complete the partial Task 2 rows export using
+the still-frozen v1 rows as a recovery source, then build v2:
+
+```powershell
+python scripts/complete_c2_rows.py `
+  --task2-rows data/interim/annotated/rows.jsonl `
+  --previous-release-rows data/v1/rows.jsonl `
+  --c1-rows data/interim/parsed/rows.jsonl `
+  --links data/interim/annotated/links.jsonl `
+  --output data/interim/normalized/v2_rows.jsonl `
+  --provenance tasks/A-data-transformation/provenance/c2_v2_completion.json
+
+$env:PYTHONPATH = "src"
+python scripts/make_release.py `
+  --rows data/interim/normalized/v2_rows.jsonl `
+  --links data/interim/annotated/links.jsonl `
+  --splits tasks/A-data-transformation/provenance/split_v1.json `
+  --source tasks/A-data-transformation/provenance/source_archive.json `
+  --decisions tasks/A-data-transformation/provenance/decision_defaults_v1.json `
+  --output data/v2 `
+  --version v2 `
+  --provenance tasks/A-data-transformation/provenance/release_v2.json `
+  --provenance-input tasks/A-data-transformation/provenance/c2_v2_completion.json
+```
+
+## Decisions and experiments
+
+Record approved D1–D16 values in the release decisions input. Keep experiment
+notes under `experiments/` and link their conclusions here when they inform a
+release decision.

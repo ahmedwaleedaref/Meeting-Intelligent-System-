@@ -1,4 +1,7 @@
 {
+  "dataset_stage": "C2",
+  "status": "historical_v1_inputs;_task2_regeneration_unavailable",
+  "note": "These fingerprints identify the C2 files used for frozen v1. The original files at the recorded interim paths have since been replaced by an updated Task 2 export; see c2_v2_completion.json for the v2 inputs and completion record.",
   "input": {
     "path": "data/interim/parsed/rows.jsonl",
     "sha256": "de1711a720d2a121a2279d3ff105a758308af71d6189fecad0663c4d131fbb64",
@@ -14,5 +17,11 @@
     "sha256": "bf6d20b739a8e596ac4efe36a50e256e28d702ad5782949503c99ccd20e74681",
     "row_count": 3831
   },
+  "validation": {
+    "release_contract": "passed",
+    "error_class_quality_flags": 0,
+    "task2_clean_regeneration": "not_performed"
+  },
+  "regeneration_note": "The fetched origin/A/labels-links commit 9a76d167f3b6cef710c428586c65cb681ad3f537 contains only the project scaffold and no Task 2 annotation or link-generation implementation. These hashes identify the supplied C2 inputs; they do not establish how Task 2 generated them."
   "producing_commit": "01ae95923bfa04b74467fbb1a60189371bc95900"
 }
