@@ -80,7 +80,8 @@ Reads `DialogueActs/*.dialogue-acts.xml`, resolves each act's word range in `Wor
 ### 3.2 Task 2 — Annotation semantics (`A/labels-links`)
 
 `src/smi/labels.py` (the single class list), `src/smi/data/annotate/`, `scripts/annotate_rows.py`,
-`scripts/clean_rows.py`. It adds these fields to every C1 row:
+`scripts/clean_rows.py`. Normative definitions: [schema/02](schema/02_annotations_links.md); background:
+[MRDA tags and adjacency pairs](../../concepts/mrda-tags-and-adjacency-pairs.md). It adds these fields to every C1 row:
 
 | Field | Meaning |
 |---|---|
@@ -147,7 +148,7 @@ Against `PART_A_TASK_BREAKDOWN_v2`. Reasons in Section 5 where a decision was in
 | Three scripts: parse, annotate, make_release | Added `scripts/run_pipeline.py` (one command, fail-fast checks, fingerprint comparison) | Fewer manual steps, same result every time |
 | `complete_c2_rows.py` rebuilds v2 from v1 | Obsolete; kept in the repo but cannot run without v1 | The new chain releases the cleaned rows directly |
 | New `decision_defaults_v3.json` | D5, D12 and D15 reworded for the cleaned design; stored in each release's `metadata.json` | The v1 wording ("keep every row") would be false |
-| Not delivered | `schema/02`, `concepts/mrda-tags-and-adjacency-pairs.md`, `pyproject.toml`, root README row, Table 5 comparison, the "every field documented once" check | Open (Section 10) |
+| Not delivered | `pyproject.toml`, root README row, Table 5 comparison, the "every field documented once" check | Open (Section 10) |
 
 ## 5. Decisions and choices
 
@@ -287,10 +288,10 @@ checkout. Prefer the pipeline. See [parser_usage.md](parser_usage.md) for the pa
 
 | Item | Location | Notes |
 |---|---|---|
-| Schemas | `schema/01_parsed_rows.md`, `schema/03_release.md` | `schema/02` is not written yet |
+| Schemas | `schema/01_parsed_rows.md`, `schema/02_annotations_links.md`, `schema/03_release.md` | One normative document per task |
 | Provenance | `provenance/` | `source_archive.json`, `c1.json`, `c2_clean.json`, `split_v1.json`, `transcript_corrections.json`, `decision_defaults_v3.json` |
 | Reports | `reports/` | `parse_validation.md`, `annotation_report.md` |
-| Concept note | `../../concepts/nxt-icsi-annotations.md` | NXT structure |
+| Concept notes | `../../concepts/nxt-icsi-annotations.md`, `../../concepts/mrda-tags-and-adjacency-pairs.md` | NXT structure; tag and adjacency notation |
 | Generated data | `data/` | Git-ignored |
 
 ## 8. Tests and validation
@@ -307,9 +308,7 @@ files, never corpus excerpts.
 
 - Tests that need generated data (`data/vN`, `data/interim`, the raw corpus) skip when it is
   absent, so run the pipeline first to exercise them.
-- 2 tests are strict expected failures that mark the two missing documents, `schema/02` and the MRDA
-  concept note (Section 10). Each starts failing once its file exists, as a reminder to remove the marker.
-- Latest run on the real `data/v3`: 536 passed, 5 skipped, 2 expected failures. Run in a clean
+- Latest run on the real `data/v3`: 538 passed, 5 skipped, none expected to fail. Run in a clean
   `git clone` with the pending changes laid over it, only the data-dependent tests skipped. A one-off check with 20
   deliberately injected faults across the three tasks (run before the latest Task 3 changes)
   caught all 20.
@@ -351,13 +350,11 @@ records, which each lose one reply row. No proposal is removed.
   open pair; 154 of them precede their opener†); only restarts to number 1 are detected, and they
   are not periodic†; there is no distance or speaker guard; 8 resolved proposals are answered only
   by the proposer's own speaker id†. 1,589 linked proposals is a lower bound.
-- **Missing deliverables:** `schema/02_annotations_links.md` (until it exists, Section 3.2's field
-  table is the reference), the MRDA concept note, `pyproject.toml`, the root README row, and the
-  check that every field is documented in exactly one schema.
-- **Known issues:** `annotate_rows.py` and `clean_rows.py` record `git rev-parse HEAD`, so they and
-  4 of their tests need a git checkout (a copy without `.git` fails them; the pipeline does not);
-  `reports/annotation_semantics_report/annotation_semantics_report.pdf` (the October Task 2 progress
-  report, 6 pages) is tracked but linked from nowhere.
+- **Missing deliverables:** `pyproject.toml`, the root README row, and the check that every field is
+  documented in exactly one schema (the three schema documents now exist, but schema 02 covers the
+  annotated stage, whose three flags are absent from the release).
+- **Known issue:** `annotate_rows.py` and `clean_rows.py` record `git rev-parse HEAD`, so they and
+  4 of their tests need a git checkout (a copy without `.git` fails them; the pipeline does not).
 - **Environment:** the two raw-corpus tests look for the data at `data/raw/icsi_core_nxt`; data
   tests skip on a machine without generated data.
 

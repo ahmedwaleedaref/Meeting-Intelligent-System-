@@ -105,14 +105,12 @@ def test_relative_links_in_the_task_docs_resolve(name: str) -> None:
     assert missing == []
 
 
-@pytest.mark.xfail(strict=True, reason="schema/02_annotations_links.md is not on this branch yet")
 def test_schema_02_documents_every_annotation_and_link_field() -> None:
-    """Schema 02 lists every annotation field and every link field."""
+    """Schema 02 lists every annotation field and every link field, in the order the code writes them."""
     documented = table_fields(SCHEMA / "02_annotations_links.md")
-    assert set(documented) == set(ANNOTATION_FIELDS) | set(LinkRecord.__annotations__)
+    assert documented == [*ANNOTATION_FIELDS, *LinkRecord.__annotations__]
 
 
-@pytest.mark.xfail(strict=True, reason="concepts/mrda-tags-and-adjacency-pairs.md is not on this branch yet")
 def test_concept_note_for_mrda_tags_and_adjacency_pairs_exists() -> None:
     """The MRDA tag and adjacency-pair concept note required from Task 2 is present."""
     assert (CONCEPTS / "mrda-tags-and-adjacency-pairs.md").read_text(encoding="utf-8").strip()
