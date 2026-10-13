@@ -143,15 +143,14 @@ def test_release_rows_never_gain_flag_fields(built: tuple[Path, str, dict[str, P
         assert not {"is_nonspeech", "is_nonlabeled", "is_empty"} & set(row)
 
 
-def test_removed_rows_leave_position_gaps_that_still_build_and_load(tmp_path: Path) -> None:
-    """A meeting with a removed middle row keeps its original positions and builds a valid release."""
+def test_position_gaps_stop_the_build_so_rows_must_be_renumbered_first(tmp_path: Path) -> None:
+    """A meeting with a removed middle row is refused: positions must be contiguous from zero."""
     rows, links, provenance = c2_fixture()
     rows = [row for row in rows if row["seg_id"] != "m1-r"]
     links[0] = link("m1-p", [])
-    output, _, _ = build_release(tmp_path, inputs=write_inputs(tmp_path / "in", rows, links, provenance))
-    built_rows, _, _ = read_release_parts(output)
-    assert [row["position"] for row in built_rows if row["meeting"] == "m1"] == [0, 2]
-    assert len(load_release(output).rows) == 5
+    with pytest.raises(ValueError, match="contiguous from zero"):
+        build_release(tmp_path, inputs=write_inputs(tmp_path / "in", rows, links, provenance))
+    assert not (tmp_path / "release").exists()
 
 
 def test_real_build_writes_provenance_with_hashes_of_inputs_and_outputs(tmp_path: Path) -> None:

@@ -94,6 +94,9 @@ def preflight(config: PipelineConfig) -> None:
     """Fail fast, before any long stage, on missing inputs or an occupied release folder."""
     if not re.fullmatch(r"v[1-9][0-9]*", config.version):
         raise PipelineError(f"--version must look like v3, got {config.version!r}")
+    for name in ("source_archive.json", DECISIONS_FILE):
+        if not (config.provenance_dir / name).is_file():
+            raise PipelineError(f"missing provenance file {config.provenance_dir / name}")
     for folder in ("DialogueActs", "Words", "transcripts"):
         if not (config.raw_root / folder).is_dir():
             raise PipelineError(f"{config.raw_root} has no {folder}/ folder (see --raw-root)")

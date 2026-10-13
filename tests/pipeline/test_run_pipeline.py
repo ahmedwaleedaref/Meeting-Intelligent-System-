@@ -234,6 +234,20 @@ def test_missing_raw_folder_is_refused_before_any_work(inputs: dict[str, Path], 
     assert not (tmp_path / "out").exists()
 
 
+@pytest.mark.parametrize("missing", ["source_archive.json", "decision_defaults_v3.json"])
+def test_missing_provenance_file_is_refused_before_any_work(
+    inputs: dict[str, Path], tmp_path: Path, missing: str
+) -> None:
+    """A provenance file the later stages need is checked up front, not after the long stages."""
+    provenance = tmp_path / "provenance"
+    shutil.copytree(inputs["provenance"], provenance)
+    (provenance / missing).unlink()
+    config = PipelineConfig(inputs["raw"], inputs["archive"], tmp_path / "out", "v3", provenance)
+    with pytest.raises(PipelineError, match=missing):
+        run_pipeline(config)
+    assert not (tmp_path / "out").exists()
+
+
 def test_archive_with_the_wrong_hash_is_refused_before_any_work(inputs: dict[str, Path], tmp_path: Path) -> None:
     """An archive that does not match provenance/source_archive.json stops the run."""
     other = tmp_path / "other.zip"

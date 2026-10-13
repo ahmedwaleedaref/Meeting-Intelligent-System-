@@ -41,6 +41,12 @@ def _swap_rows(parts: Parts) -> None:
     parts[0][0], parts[0][1] = parts[0][1], parts[0][0]
 
 
+def _shift_meeting_positions(parts: Parts) -> None:
+    for row in parts[0]:
+        if row["meeting"] == "m1":
+            row["position"] += 1
+
+
 def _split(**changes: Any) -> Callable[[Parts], None]:
     return lambda parts: parts[2].update(changes)
 
@@ -73,6 +79,8 @@ ROW_CASES = [
     ("empty seg_id", _row(0, seg_id=""), "non-empty string"),
     ("negative position", _row(0, position=-1), "invalid position"),
     ("duplicate position", _row(1, position=0), "duplicate position in meeting"),
+    ("position gap", _row(2, position=5), "must be contiguous from zero"),
+    ("meeting not starting at zero", _shift_meeting_positions, "must be contiguous from zero"),
     ("unsorted rows", _swap_rows, r"sorted by \(meeting, position\)"),
     ("timing outside source", _row(0, end=99.0), "inconsistent source and dialogue-act timings"),
     ("nan time", _row(0, start=float("nan")), "invalid start"),
@@ -137,33 +145,6 @@ def test_link_violations_are_rejected(
     """Each broken link rule raises its own ValueError."""
     mutate(parts)
     with pytest.raises(ValueError, match=message):
-        validate_release_content(*parts)
-
-
-def test_positions_may_have_gaps_where_rows_were_removed(parts: Parts) -> None:
-    """Strictly increasing positions with holes are accepted, since cleaning does not renumber."""
-    parts[0][2]["position"] = 5
-    validate_release_content(*parts)
-
-
-def test_a_meeting_may_start_above_position_zero(parts: Parts) -> None:
-    """A meeting whose first rows were removed still validates."""
-    for index, row in enumerate(parts[0][:3]):
-        row["position"] = index + 10
-    validate_release_content(*parts)
-
-
-def test_duplicate_positions_are_still_rejected_next_to_gaps(parts: Parts) -> None:
-    """Allowing gaps does not allow two rows at one position."""
-    parts[0][2]["position"] = 1
-    with pytest.raises(ValueError, match="duplicate position in meeting"):
-        validate_release_content(*parts)
-
-
-def test_rows_with_gaps_must_still_be_sorted_by_position(parts: Parts) -> None:
-    """Out-of-order rows are rejected even when positions have gaps."""
-    parts[0][0]["position"] = 9
-    with pytest.raises(ValueError, match=r"sorted by \(meeting, position\)"):
         validate_release_content(*parts)
 
 

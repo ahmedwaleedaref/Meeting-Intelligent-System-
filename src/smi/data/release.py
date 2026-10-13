@@ -176,6 +176,7 @@ def validate_release_content(
     rows_by_id: dict[str, Mapping[str, Any]] = {}
     meeting_seen: dict[str, tuple[str, int | None]] = {}
     positions: set[tuple[str, int]] = set()
+    positions_by_meeting: dict[str, list[int]] = {}
     ordered_keys: list[tuple[str, int]] = []
     for row in rows:
         missing = _ROW_FIELDS - set(row)
@@ -195,6 +196,9 @@ def validate_release_content(
             raise ValueError(f"duplicate position in meeting {meeting!r}")
         positions.add((meeting, row["position"]))
         ordered_keys.append((meeting, row["position"]))
+        if meeting not in positions_by_meeting:
+            positions_by_meeting[meeting] = []
+        positions_by_meeting[meeting].append(row["position"])
 
         text_fields = (
             "agent",
@@ -326,6 +330,10 @@ def validate_release_content(
         raise ValueError("split meeting coverage mismatch (" + "; ".join(details) + ")")
     if ordered_keys != sorted(ordered_keys):
         raise ValueError("rows.jsonl must be sorted by (meeting, position)")
+    for meeting, meeting_positions in positions_by_meeting.items():
+        meeting_positions.sort()
+        if meeting_positions != list(range(len(meeting_positions))):
+            raise ValueError(f"positions for meeting {meeting!r} must be contiguous from zero")
 
     links_by_proposal: dict[str, Mapping[str, Any]] = {}
     for record in links:

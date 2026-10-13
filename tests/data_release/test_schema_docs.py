@@ -66,10 +66,36 @@ def test_concept_note_for_nxt_exists() -> None:
     assert (CONCEPTS / "nxt-icsi-annotations.md").read_text(encoding="utf-8").strip()
 
 
-def test_task_readme_has_goal_status_and_decisions() -> None:
-    """The task README has the Goal, Status and Decisions sections."""
-    headings = re.findall(r"^## (.+)$", (TASK_FOLDER / "README.md").read_text(encoding="utf-8"), re.MULTILINE)
-    assert {"Goal", "Status", "Decisions"} <= set(headings)
+def test_task_readme_has_the_documented_sections() -> None:
+    """The README has the overview, per-task, deviations, decisions, usage and limitations sections."""
+    text = (TASK_FOLDER / "README.md").read_text(encoding="utf-8")
+    headings = {re.sub(r"^\d+\.\s*", "", heading).lower() for heading in re.findall(r"^## (.+)$", text, re.MULTILINE)}
+    assert {
+        "overview",
+        "what each task did",
+        "deviations from the original plan",
+        "decisions and choices",
+        "how to use the pipeline",
+        "limitations and open items",
+    } <= headings
+
+
+def test_summary_stays_within_the_team_length_limit() -> None:
+    """SUMMARY.md exists and has at most 60 non-blank lines."""
+    lines = (TASK_FOLDER / "SUMMARY.md").read_text(encoding="utf-8").splitlines()
+    assert 0 < sum(1 for line in lines if line.strip()) <= 60
+
+
+@pytest.mark.parametrize("name", ["README.md", "SUMMARY.md"])
+def test_relative_links_in_the_task_docs_resolve(name: str) -> None:
+    """Every relative link in the task README and summary points at a file that exists."""
+    text = (TASK_FOLDER / name).read_text(encoding="utf-8")
+    missing = [
+        target
+        for target in re.findall(r"\]\(([^)#]+)(?:#[^)]*)?\)", text)
+        if not target.startswith("http") and not (TASK_FOLDER / target).exists()
+    ]
+    assert missing == []
 
 
 @pytest.mark.xfail(strict=True, reason="schema/02_annotations_links.md is not on this branch yet")
