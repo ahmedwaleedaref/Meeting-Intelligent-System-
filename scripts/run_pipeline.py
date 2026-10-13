@@ -1,9 +1,10 @@
-"""Run every Part A stage (parse, annotate, clean, split, release) and build a data release.
+"""Run every Part A stage (parse, annotate, clean, split, renumber, release) and build a data release.
 
     python scripts/run_pipeline.py --raw-root PATH/icsi_core_nxt --archive PATH/ICSI_core_NXT.zip
 
 Intermediate files go to <data-root>/interim and the release, built from the cleaned rows,
-to <data-root>/<version>.
+to <data-root>/<version>. The last transformation before the release renumbers each meeting's
+positions 0..n-1 in the existing order; the cleaned files keep the original positions.
 Tracked provenance and reports are read for comparison but never written.
 """
 
@@ -182,12 +183,31 @@ def stage_split(config: PipelineConfig) -> Path:
     return split_path
 
 
-def stage_release(config: PipelineConfig, split_path: Path) -> str:
-    """Task 3: validate and write the five-file release from the cleaned rows and links."""
-    cleaned = config.interim / "cleaned"
+def renumber_positions(rows: list[Any]) -> list[Any]:
+    """Give each meeting's rows positions 0..n-1 in their current order; every other field is kept."""
+    next_position: dict[str, int] = {}
+    renumbered = []
+    for row in rows:
+        position = next_position.get(row["meeting"], 0)
+        next_position[row["meeting"]] = position + 1
+        renumbered.append({**row, "position": position})
+    return renumbered
+
+
+def stage_renumber(config: PipelineConfig) -> Path:
+    """Final transformation: make every meeting's cleaned positions continuous (0..n-1)."""
+    rows = renumber_positions(read_parsed_rows(config.interim / "cleaned" / "rows.jsonl"))
+    release_rows = config.interim / "release_input" / "rows.jsonl"
+    write_jsonl(rows, release_rows)
+    log(f"  renumber  {len(rows):>8} rows, positions 0..n-1 in every meeting")
+    return release_rows
+
+
+def stage_release(config: PipelineConfig, split_path: Path, rows_path: Path) -> str:
+    """Task 3: validate and write the five-file release from the renumbered rows."""
     fingerprint = make_release(
-        cleaned / "rows.jsonl",
-        cleaned / "links.jsonl",
+        rows_path,
+        config.interim / "cleaned" / "links.jsonl",
         split_path,
         config.provenance_dir / "source_archive.json",
         config.provenance_dir / DECISIONS_FILE,
@@ -256,7 +276,8 @@ def run_pipeline(config: PipelineConfig) -> str:
     annotated, links = stage_annotate(config, parsed_path)
     stage_clean(config, annotated, links)
     split_path = stage_split(config)
-    fingerprint = stage_release(config, split_path)
+    release_rows = stage_renumber(config)
+    fingerprint = stage_release(config, split_path, release_rows)
     compare_with_committed(config)
     manifest = write_manifest(config, archive_sha, fingerprint)
     log(f"Done. Release: {config.release_dir}  Manifest: {manifest}")

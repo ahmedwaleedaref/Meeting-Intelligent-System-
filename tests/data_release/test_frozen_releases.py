@@ -191,9 +191,9 @@ def test_release_rows_carry_no_non_speech_flags_and_no_empty_text(release: Relea
     assert all(row["text"] for row in release.rows)
 
 
-def test_positions_strictly_increase_within_each_meeting(release: ReleaseData) -> None:
-    """Positions keep the original order, with gaps allowed where rows were removed."""
-    last: dict[str, int] = {}
+def test_positions_are_continuous_from_zero_within_each_meeting(release: ReleaseData) -> None:
+    """Each meeting's released positions run 0, 1, 2, ... with no gaps."""
+    seen: dict[str, int] = {}
     for row in release.rows:
-        assert row["position"] > last.get(row["meeting"], -1)
-        last[row["meeting"]] = row["position"]
+        assert row["position"] == seen.get(row["meeting"], 0)
+        seen[row["meeting"]] = row["position"] + 1

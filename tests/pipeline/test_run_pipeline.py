@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from nxt_fixtures import act, word, write_corpus
-from scripts.run_pipeline import PipelineConfig, PipelineError, main, run_pipeline
+from scripts.run_pipeline import PipelineConfig, PipelineError, main, renumber_positions, run_pipeline
 from smi.data.release import load_release
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -101,11 +101,51 @@ def test_release_is_built_from_cleaned_rows_without_flags_or_empty_text(built: t
     assert {row["part_type"] for row in release.rows} == {"s^cs", "s^aa", "s"}
 
 
-def test_release_positions_keep_their_original_values_with_gaps(built: tuple[Path, str]) -> None:
-    """The three removed rows leave gaps: kept positions are 0, 1 and 5 in every meeting."""
+def read_rows(path: Path) -> list[dict]:
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+
+
+def test_release_positions_are_continuous_from_zero(built: tuple[Path, str]) -> None:
+    """The released rows of every meeting have positions 0, 1, 2 with no gaps."""
     release = load_release(built[0] / "v3")
     for meeting in MEETINGS:
-        assert [row["position"] for row in release.rows if row["meeting"] == meeting] == [0, 1, 5]
+        assert [row["position"] for row in release.rows if row["meeting"] == meeting] == [0, 1, 2]
+
+
+def test_cleaned_files_keep_the_original_positions_with_gaps(built: tuple[Path, str]) -> None:
+    """Cleaning itself does not renumber: kept positions are still 0, 1 and 5."""
+    cleaned = read_rows(built[0] / "interim" / "cleaned" / "rows.jsonl")
+    for meeting in MEETINGS:
+        assert [row["position"] for row in cleaned if row["meeting"] == meeting] == [0, 1, 5]
+
+
+def test_renumbering_keeps_order_ids_and_every_other_field(built: tuple[Path, str]) -> None:
+    """Only position differs between the cleaned rows and the released rows."""
+    cleaned = read_rows(built[0] / "interim" / "cleaned" / "rows.jsonl")
+    released = read_rows(built[0] / "v3" / "rows.jsonl")
+    assert [row["seg_id"] for row in released] == [row["seg_id"] for row in cleaned]
+    for before, after in zip(cleaned, released):
+        assert {key: value for key, value in after.items() if key not in {"position", "split", "fold"}} == {
+            key: value for key, value in before.items() if key != "position"
+        }
+
+
+def test_release_links_are_the_cleaned_links_unchanged(built: tuple[Path, str]) -> None:
+    """Links refer to seg_id, so renumbering positions leaves them byte-identical."""
+    assert (built[0] / "v3" / "links.jsonl").read_bytes() == (built[0] / "interim" / "cleaned" / "links.jsonl").read_bytes()
+
+
+def test_renumber_positions_restarts_per_meeting_and_keeps_key_order() -> None:
+    """Each meeting counts from zero in its current order and only position changes."""
+    rows = [
+        {"meeting": "a", "position": 3, "x": 1},
+        {"meeting": "a", "position": 9, "x": 2},
+        {"meeting": "b", "position": 5, "x": 3},
+    ]
+    result = renumber_positions(rows)
+    assert [(row["meeting"], row["position"]) for row in result] == [("a", 0), ("a", 1), ("b", 0)]
+    assert [list(row) for row in result] == [["meeting", "position", "x"]] * 3
+    assert rows[0]["position"] == 3
 
 
 def test_links_survive_cleaning_and_feed_the_gold(built: tuple[Path, str]) -> None:
@@ -121,7 +161,7 @@ def test_every_stage_writes_its_output_under_interim(built: tuple[Path, str]) ->
     interim = built[0] / "interim"
     for relative in (
         "parsed/rows.jsonl", "annotated/rows.jsonl", "annotated/links.jsonl", "cleaned/rows.jsonl",
-        "cleaned/links.jsonl", "reports/parse_validation.md", "reports/annotation_report.md",
+        "cleaned/links.jsonl", "release_input/rows.jsonl", "reports/parse_validation.md", "reports/annotation_report.md",
         "reports/cleaning_report.md", "splits/split.json", "splits/ICSI-metadata.xml", "build_manifest.json",
     ):
         assert (interim / relative).is_file(), relative

@@ -55,7 +55,7 @@ def test_schema_03_describes_the_release_and_the_formatter_contract() -> None:
     for token in (
         "rows.jsonl", "links.jsonl", "splits.json", "metadata.json", "checksums.sha256",
         "[T]", "[/T]", "raw", "relative", "window_letters",
-        "select_context", "source_sha256", "malformed", "ambiguous", "cleaned", "gaps",
+        "select_context", "source_sha256", "malformed", "ambiguous", "cleaned", "gaps", "renumbers",
     ):
         assert token in text, token
     assert 'nonspeech="' not in text and "has no non-speech policy" in text
