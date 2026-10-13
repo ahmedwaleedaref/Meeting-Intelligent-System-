@@ -35,7 +35,7 @@ Read it with `load_release("data/v3")` and `ContextFormatter(release.rows)`.
 | Rows by split | train 79,039 · val 16,289 · test 20,546 |
 | Two-target acts | 18, as the specification states |
 | Release fingerprint | `b4a72c6a0a9a173a7680e95f9757bcf3bf32a53850fca6d9aaaaf9c9d4786c9b` |
-| Tests | 531; latest run 522 passed, 5 skipped, 4 expected failures ([tests](README.md#8-tests-and-validation)) |
+| Tests | 542; latest run 533 passed, 5 skipped, 4 expected failures ([tests](README.md#8-tests-and-validation)) |
 
 ## Key decisions
 
@@ -57,4 +57,4 @@ Details in [Section 10](README.md#10-limitations-and-open-items).
 - Table 9 and Table 5 were never supplied; Class P decisions and the new D5 wording are unconfirmed.
 - Replies ordered before their opening act are lost, so the link count is a lower bound.
 - Missing: `schema/02`, the MRDA concept note, `pyproject.toml`, `release_v3.json`.
-- Known defects: invalid `provenance/c2.json`, a cleaning-report miscount, CRLF in the split writer.
+- Known defects: stale notes in `provenance/c2.json`, a cleaning-report miscount, CRLF in the split writer.

@@ -22,6 +22,6 @@
     "error_class_quality_flags": 0,
     "task2_clean_regeneration": "not_performed"
   },
-  "regeneration_note": "The fetched origin/A/labels-links commit 9a76d167f3b6cef710c428586c65cb681ad3f537 contains only the project scaffold and no Task 2 annotation or link-generation implementation. These hashes identify the supplied C2 inputs; they do not establish how Task 2 generated them."
+  "regeneration_note": "The fetched origin/A/labels-links commit 9a76d167f3b6cef710c428586c65cb681ad3f537 contains only the project scaffold and no Task 2 annotation or link-generation implementation. These hashes identify the supplied C2 inputs; they do not establish how Task 2 generated them.",
   "producing_commit": "01ae95923bfa04b74467fbb1a60189371bc95900"
 }

@@ -1,5 +1,6 @@
 """Part A: schema docs, concept notes and the task README stay consistent with the code."""
 
+import json
 import re
 from pathlib import Path
 
@@ -59,6 +60,12 @@ def test_schema_03_describes_the_release_and_the_formatter_contract() -> None:
     ):
         assert token in text, token
     assert 'nonspeech="' not in text and "has no non-speech policy" in text
+
+
+@pytest.mark.parametrize("path", sorted((TASK_FOLDER / "provenance").glob("*.json")), ids=lambda path: path.name)
+def test_every_provenance_file_is_valid_json(path: Path) -> None:
+    """Each provenance file parses as a JSON object, so a merge slip cannot hide in one."""
+    assert isinstance(json.loads(path.read_text(encoding="utf-8")), dict)
 
 
 def test_concept_note_for_nxt_exists() -> None:
