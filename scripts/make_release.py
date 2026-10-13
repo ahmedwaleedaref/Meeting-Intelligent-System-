@@ -57,7 +57,6 @@ def make_release(
     _validate_decisions(decisions)
 
     splits = _make_release_splits(split_provenance, split_bytes)
-    rows = _add_required_context_flags(rows)
     rows = attach_split_info(rows, split_provenance)
     validate_release_content(rows, links, splits)
 
@@ -102,27 +101,6 @@ def make_release(
         )
 
     return fingerprint
-
-
-def _add_required_context_flags(
-    rows: Sequence[Mapping[str, Any]],
-) -> list[dict[str, Any]]:
-    """Fill D5 flags when an upstream C2 export does not include them."""
-    normalized_rows = []
-    for row in rows:
-        normalized = dict(row)
-        if "is_nonspeech" not in normalized:
-            general_tags = normalized.get("general_tags", [])
-            if not isinstance(general_tags, list):
-                general_tags = []
-            normalized["is_nonspeech"] = any(
-                tag in {"z", "x"} for tag in general_tags
-            )
-        if "is_empty" not in normalized:
-            text = normalized.get("text")
-            normalized["is_empty"] = isinstance(text, str) and text == ""
-        normalized_rows.append(normalized)
-    return normalized_rows
 
 
 def _write_release_provenance(

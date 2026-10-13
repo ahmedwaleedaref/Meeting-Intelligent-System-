@@ -61,8 +61,6 @@ _ROW_FIELDS = {
     "is_layer2_proposal",
     "general_tags",
     "disruption_markers",
-    "is_nonspeech",
-    "is_empty",
     "split",
     "fold",
 }
@@ -178,7 +176,6 @@ def validate_release_content(
     rows_by_id: dict[str, Mapping[str, Any]] = {}
     meeting_seen: dict[str, tuple[str, int | None]] = {}
     positions: set[tuple[str, int]] = set()
-    positions_by_meeting: dict[str, list[int]] = {}
     ordered_keys: list[tuple[str, int]] = []
     for row in rows:
         missing = _ROW_FIELDS - set(row)
@@ -198,9 +195,6 @@ def validate_release_content(
             raise ValueError(f"duplicate position in meeting {meeting!r}")
         positions.add((meeting, row["position"]))
         ordered_keys.append((meeting, row["position"]))
-        if meeting not in positions_by_meeting:
-            positions_by_meeting[meeting] = []
-        positions_by_meeting[meeting].append(row["position"])
 
         text_fields = (
             "agent",
@@ -269,9 +263,8 @@ def validate_release_content(
         should_be_proposal = "cs" in target_tags or "co" in target_tags
         if row["is_layer2_proposal"] != should_be_proposal:
             raise ValueError(f"row {seg_id!r} has is_layer2_proposal inconsistent with target_tags")
-        for name in ("is_multi_target", "is_nonspeech", "is_empty"):
-            if type(row[name]) is not bool:
-                raise ValueError(f"row {seg_id!r} has invalid {name}")
+        if type(row["is_multi_target"]) is not bool:
+            raise ValueError(f"row {seg_id!r} has invalid is_multi_target")
         if row["is_multi_target"] != (len(target_tags) >= 2):
             raise ValueError(f"row {seg_id!r} has is_multi_target inconsistent with target_tags")
         quality_flags = row["quality_flags"]
@@ -292,8 +285,6 @@ def validate_release_content(
         if error_flags:
             flags_text = ", ".join(sorted(error_flags))
             raise ValueError(f"row {seg_id!r} has error-class quality flags: {flags_text}")
-        if row["is_empty"] != (row["text"] == ""):
-            raise ValueError(f"row {seg_id!r} has is_empty inconsistent with text")
         for field in ("general_tags", "disruption_markers"):
             values = row[field]
             if not isinstance(values, list):
@@ -335,10 +326,6 @@ def validate_release_content(
         raise ValueError("split meeting coverage mismatch (" + "; ".join(details) + ")")
     if ordered_keys != sorted(ordered_keys):
         raise ValueError("rows.jsonl must be sorted by (meeting, position)")
-    for meeting, meeting_positions in positions_by_meeting.items():
-        meeting_positions.sort()
-        if meeting_positions != list(range(len(meeting_positions))):
-            raise ValueError(f"positions for meeting {meeting!r} must be contiguous from zero")
 
     links_by_proposal: dict[str, Mapping[str, Any]] = {}
     for record in links:

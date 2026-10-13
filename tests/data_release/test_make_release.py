@@ -136,25 +136,22 @@ def test_built_release_loads_and_exposes_layer2_gold(built: tuple[Path, str, dic
     assert [item["proposal_id"] for item in release.layer2_gold()] == ["m1-p", "m1-q", "m2-p"]
 
 
-def test_missing_context_flags_are_backfilled_from_tags_and_text(tmp_path: Path) -> None:
-    """is_nonspeech comes from z/x general tags and is_empty from empty text when absent."""
-    rows, links, provenance = c2_fixture()
-    rows[1]["general_tags"] = ["x"]
-    rows[4]["text"] = ""
+def test_release_rows_never_gain_flag_fields(built: tuple[Path, str, dict[str, Path]]) -> None:
+    """The builder adds only split and fold; it does not invent any non-speech flag."""
+    rows, _, _ = read_release_parts(built[0])
     for row in rows:
-        row.pop("is_nonspeech"), row.pop("is_empty")
+        assert not {"is_nonspeech", "is_nonlabeled", "is_empty"} & set(row)
+
+
+def test_removed_rows_leave_position_gaps_that_still_build_and_load(tmp_path: Path) -> None:
+    """A meeting with a removed middle row keeps its original positions and builds a valid release."""
+    rows, links, provenance = c2_fixture()
+    rows = [row for row in rows if row["seg_id"] != "m1-r"]
+    links[0] = link("m1-p", [])
     output, _, _ = build_release(tmp_path, inputs=write_inputs(tmp_path / "in", rows, links, provenance))
     built_rows, _, _ = read_release_parts(output)
-    assert [row["is_nonspeech"] for row in built_rows] == [False, True, False, False, False, False]
-    assert [row["is_empty"] for row in built_rows] == [False, False, False, False, True, False]
-
-
-def test_provided_context_flags_are_not_overwritten(tmp_path: Path) -> None:
-    """Flags already present in the C2 rows are kept as they are."""
-    rows, links, provenance = c2_fixture()
-    rows[0]["is_nonspeech"] = True
-    output, _, _ = build_release(tmp_path, inputs=write_inputs(tmp_path / "in", rows, links, provenance))
-    assert read_release_parts(output)[0][0]["is_nonspeech"] is True
+    assert [row["position"] for row in built_rows if row["meeting"] == "m1"] == [0, 2]
+    assert len(load_release(output).rows) == 5
 
 
 def test_real_build_writes_provenance_with_hashes_of_inputs_and_outputs(tmp_path: Path) -> None:

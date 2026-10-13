@@ -22,7 +22,12 @@ from smi.data.splits import (
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 TASK_FOLDER = PROJECT_ROOT / "tasks" / "A-data-transformation"
 SPLIT_FILE = TASK_FOLDER / "provenance" / "split_v1.json"
-METADATA_XML = PROJECT_ROOT / "data" / "ICSI-metadata.xml"
+METADATA_CANDIDATES = (
+    PROJECT_ROOT / "data" / "ICSI-metadata.xml",
+    PROJECT_ROOT / "data" / "interim" / "splits" / "ICSI-metadata.xml",
+)
+METADATA_XML = next((path for path in METADATA_CANDIDATES if path.is_file()), METADATA_CANDIDATES[0])
+RELEASES = sorted(path.name for path in (PROJECT_ROOT / "data").glob("v[0-9]*") if path.is_dir())
 
 
 @pytest.fixture(scope="module")
@@ -113,7 +118,7 @@ def test_split_covers_exactly_the_meeting_universe(meetings: dict[str, dict[str,
     assert set(load_meeting_ids(METADATA_XML)) == set(meetings)
 
 
-@pytest.mark.parametrize("version", ["v1", "v2"])
+@pytest.mark.parametrize("version", RELEASES)
 def test_released_splits_json_matches_the_provenance(provenance: dict[str, Any], version: str) -> None:
     """Each release's splits.json has the same K, grouping and per-meeting assignments."""
     splits = json.loads((PROJECT_ROOT / "data" / version / "splits.json").read_text(encoding="utf-8"))
@@ -133,7 +138,7 @@ def test_attaching_split_info_gives_every_meeting_its_recorded_assignment(
     }
 
 
-@pytest.mark.parametrize("version", ["v1", "v2"])
+@pytest.mark.parametrize("version", RELEASES)
 def test_recorded_split_hash_differs_from_the_committed_file_only_by_line_endings(version: str) -> None:
     """The hash stored in each release is the CRLF form of the committed split file."""
     recorded = json.loads((PROJECT_ROOT / "data" / version / "splits.json").read_text(encoding="utf-8"))["source_sha256"]
@@ -141,12 +146,7 @@ def test_recorded_split_hash_differs_from_the_committed_file_only_by_line_ending
     assert recorded in {sha256_of(lf), sha256_of(lf.replace(b"\n", b"\r\n"))}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="frozen v1 and v2 record the hash of a CRLF copy of split_v1.json (9b760df2...), but the committed "
-    "file has LF endings (bd2ad0f4...), so source_sha256 cannot be reproduced off Windows",
-)
-@pytest.mark.parametrize("version", ["v1", "v2"])
+@pytest.mark.parametrize("version", RELEASES)
 def test_released_split_hash_matches_the_committed_file_bytes(version: str) -> None:
     """source_sha256 in each release equals the SHA-256 of the committed split_v1.json."""
     recorded = json.loads((PROJECT_ROOT / "data" / version / "splits.json").read_text(encoding="utf-8"))["source_sha256"]

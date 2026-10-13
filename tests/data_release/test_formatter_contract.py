@@ -6,11 +6,8 @@ from release_fixtures import formatter_row
 from smi.inputs.formatter import ContextFormatter
 
 
-def stream(count: int = 11, meeting: str = "m1", flagged: tuple[int, ...] = ()) -> list[dict]:
-    return [
-        formatter_row(f"{meeting}-{index}", meeting, index, f"p{index % 3}", f"text{index}", nonspeech=index in flagged)
-        for index in range(count)
-    ]
+def stream(count: int = 11, meeting: str = "m1") -> list[dict]:
+    return [formatter_row(f"{meeting}-{index}", meeting, index, f"p{index % 3}", f"text{index}") for index in range(count)]
 
 
 def ids(meeting: str, *positions: int) -> list[str]:
@@ -64,36 +61,6 @@ def test_same_position_in_different_meetings_is_allowed() -> None:
     ContextFormatter([*stream(2, "m1"), *stream(2, "m2")])
 
 
-def test_drop_skips_flagged_units_when_counting() -> None:
-    """With drop, flagged neighbors are removed before the window is counted."""
-    formatter = ContextFormatter(stream(10, flagged=(3, 4)))
-    assert formatter.select_context("m1-5", 3, 0) == ids("m1", 0, 1, 2, 5)
-    assert formatter.select_context("m1-2", 0, 2) == ids("m1", 2, 5, 6)
-
-
-def test_placeholder_counts_flagged_units() -> None:
-    """With placeholder, flagged units take up window slots."""
-    formatter = ContextFormatter(stream(10, flagged=(3, 4)))
-    assert formatter.select_context("m1-5", 3, 0, "placeholder") == ids("m1", 2, 3, 4, 5)
-
-
-def test_flagged_target_is_kept_and_rendered_per_policy() -> None:
-    """A flagged target stays selected; placeholder replaces its text, drop keeps it."""
-    formatter = ContextFormatter(stream(5, flagged=(2,)))
-    assert formatter.select_context("m1-2", 1, 1) == ids("m1", 1, 2, 3)
-    assert formatter.format("m1-2", 0, 0, "raw") == "[T]text2[/T]"
-    assert formatter.format("m1-2", 0, 0, "raw", nonspeech="placeholder") == "[T][nonverbal][/T]"
-
-
-def test_empty_rows_are_treated_like_non_speech() -> None:
-    """is_empty rows are dropped or replaced exactly like is_nonspeech rows."""
-    rows = stream(4)
-    rows[1] = formatter_row("m1-1", "m1", 1, "p1", "", empty=True)
-    formatter = ContextFormatter(rows)
-    assert formatter.select_context("m1-2", 2, 0) == ids("m1", 0, 2)
-    assert "[nonverbal]" in formatter.format("m1-2", 2, 0, "raw", nonspeech="placeholder")
-
-
 def test_raw_mode_uses_speaker_ids_and_joins_lines_with_single_lf() -> None:
     """Raw lines read 'Speaker <id>: <text>', joined by one LF with no trailing LF."""
     text = ContextFormatter(stream()).format("m1-5", 1, 1, "raw")
@@ -129,11 +96,10 @@ def test_window_letters_continue_past_z() -> None:
     assert lines[26].startswith("Speaker AA:") and lines[27].startswith("Speaker AB:")
 
 
-@pytest.mark.parametrize("policy", ["drop", "placeholder"])
-def test_zero_window_is_identical_across_speaker_modes(policy: str) -> None:
+def test_zero_window_is_identical_across_speaker_modes() -> None:
     """With no context no speaker tag is emitted, so every mode gives the same text."""
     formatter = ContextFormatter(stream())
-    outputs = {formatter.format("m1-5", 0, 0, mode, nonspeech=policy) for mode in ("raw", "relative", "window_letters")}
+    outputs = {formatter.format("m1-5", 0, 0, mode) for mode in ("raw", "relative", "window_letters")}
     assert outputs == {"[T]text5[/T]"}
 
 
@@ -167,13 +133,32 @@ def test_invalid_window_sizes_are_rejected(window: tuple) -> None:
         ContextFormatter(stream()).select_context("m1-5", *window)
 
 
-def test_invalid_policy_and_speaker_mode_are_rejected() -> None:
-    """Unknown non-speech policies and speaker modes raise ValueError."""
-    formatter = ContextFormatter(stream())
-    with pytest.raises(ValueError, match="nonspeech must be one of"):
-        formatter.select_context("m1-5", 1, 1, "keep")
+def test_unknown_speaker_mode_is_rejected() -> None:
+    """An unknown speaker mode raises ValueError."""
     with pytest.raises(ValueError, match="speaker_mode must be one of"):
-        formatter.format("m1-5", 1, 1, "initials")
+        ContextFormatter(stream()).format("m1-5", 1, 1, "initials")
+
+
+def test_formatter_has_no_non_speech_policy() -> None:
+    """Rows are removed upstream, so the old nonspeech argument no longer exists."""
+    formatter = ContextFormatter(stream())
+    with pytest.raises(TypeError):
+        formatter.select_context("m1-5", 1, 1, "drop")
+    with pytest.raises(TypeError):
+        formatter.format("m1-5", 1, 1, "raw", nonspeech="placeholder")
+
+
+def test_every_row_of_the_meeting_counts_as_a_unit() -> None:
+    """With no flags the stream is simply every row of the meeting in position order."""
+    formatter = ContextFormatter(stream(6))
+    assert formatter.select_context("m1-3", 10, 10) == ids("m1", 0, 1, 2, 3, 4, 5)
+
+
+def test_rows_need_no_flag_fields() -> None:
+    """Rows without any non-speech flag fields are accepted as they are."""
+    row = formatter_row("m1-0", "m1", 0, "p0", "hello")
+    assert not {"is_nonspeech", "is_nonlabeled", "is_empty"} & set(row)
+    assert ContextFormatter([row]).format("m1-0", 0, 0, "raw") == "[T]hello[/T]"
 
 
 def test_unknown_target_is_rejected() -> None:
@@ -193,7 +178,6 @@ def test_unknown_target_is_rejected() -> None:
         (lambda rows: rows[0].update(position=True), "non-negative integer position"),
         (lambda rows: rows[0].update(speaker_id=""), "non-empty speaker_id"),
         (lambda rows: rows[0].update(text=None), "text as a string"),
-        (lambda rows: rows[0].update(is_empty="no"), "boolean is_nonspeech and is_empty"),
     ],
 )
 def test_malformed_rows_are_rejected_at_construction(mutate, message: str) -> None:

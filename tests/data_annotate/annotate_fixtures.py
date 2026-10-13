@@ -53,7 +53,7 @@ def parsed_row(
 
 
 def annotated(part_type: str | None, **overrides: object) -> AnnotatedRow:
-    return annotate_row(parsed_row(part_type=part_type, **overrides))  # type: ignore[arg-type]
+    return annotate_row(parsed_row(part_type=part_type, **overrides))
 
 
 def meeting_parsed(specs: Sequence[ActSpec], meeting: str = "m1") -> list[ParsedRow]:

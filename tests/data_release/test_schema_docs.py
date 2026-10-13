@@ -50,14 +50,15 @@ def test_schema_01_quality_flag_vocabulary_matches_the_code() -> None:
 
 
 def test_schema_03_describes_the_release_and_the_formatter_contract() -> None:
-    """Schema 03 names the five files, the target markers, the placeholder and all speaker modes."""
+    """Schema 03 names the five files, the target markers, all speaker modes, cleaned input and position gaps."""
     text = (SCHEMA / "03_release.md").read_text(encoding="utf-8")
     for token in (
         "rows.jsonl", "links.jsonl", "splits.json", "metadata.json", "checksums.sha256",
-        "[T]", "[/T]", "[nonverbal]", "raw", "relative", "window_letters",
-        "select_context", "source_sha256", "malformed", "ambiguous",
+        "[T]", "[/T]", "raw", "relative", "window_letters",
+        "select_context", "source_sha256", "malformed", "ambiguous", "cleaned", "gaps",
     ):
         assert token in text, token
+    assert 'nonspeech="' not in text and "has no non-speech policy" in text
 
 
 def test_concept_note_for_nxt_exists() -> None:

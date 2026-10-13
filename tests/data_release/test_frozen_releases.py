@@ -1,4 +1,4 @@
-"""Task 3: the committed v1 and v2 releases (checksums, provenance, metadata, full load)."""
+"""Task 3: every release folder found under data/ (checksums, provenance, metadata, full load)."""
 
 import hashlib
 import json
@@ -13,12 +13,13 @@ from smi.labels import LABELS
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PROVENANCE = PROJECT_ROOT / "tasks" / "A-data-transformation" / "provenance"
-VERSIONS = ("v1", "v2")
+DATA_ROOT = PROJECT_ROOT / "data"
+VERSIONS = tuple(sorted(path.name for path in DATA_ROOT.glob("v[0-9]*") if path.is_dir()))
 CONTENT_FILES = ("links.jsonl", "metadata.json", "rows.jsonl", "splits.json")
 
 
 def release_dir(version: str) -> Path:
-    return PROJECT_ROOT / "data" / version
+    return DATA_ROOT / version
 
 
 def rows_are_available(version: str) -> bool:
@@ -67,16 +68,23 @@ def test_small_content_files_match_their_recorded_checksums(version: str) -> Non
         assert digest(release_dir(version) / name) == entries[name]
 
 
+def tracked_provenance(version: str) -> dict:
+    path = PROVENANCE / f"release_{version}.json"
+    if not path.is_file():
+        pytest.skip(f"no committed release_{version}.json for this local build")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def test_release_provenance_fingerprint_is_the_hash_of_the_checksum_file(version: str) -> None:
-    """release_vN.json records the SHA-256 of checksums.sha256 as the release fingerprint."""
-    record = json.loads((PROVENANCE / f"release_{version}.json").read_text(encoding="utf-8"))
+    """release_vN.json, when committed, records the SHA-256 of checksums.sha256 as the fingerprint."""
+    record = tracked_provenance(version)
     assert record["data_version"] == version
     assert record["release_fingerprint"] == digest(release_dir(version) / "checksums.sha256")
 
 
 def test_release_provenance_output_hashes_match_the_release_files(version: str) -> None:
-    """The per-file hashes in the provenance equal the checksum entries and the checksum file hash."""
-    record = json.loads((PROVENANCE / f"release_{version}.json").read_text(encoding="utf-8"))
+    """The per-file hashes in the committed provenance equal the checksum entries and the checksum file hash."""
+    record = tracked_provenance(version)
     hashes = record["release_files_sha256"]
     assert set(hashes) == RELEASE_FILES
     assert {name: hashes[name] for name in CONTENT_FILES} == checksum_entries(version)
@@ -85,7 +93,7 @@ def test_release_provenance_output_hashes_match_the_release_files(version: str) 
 
 def test_provenance_inputs_that_are_committed_match_their_recorded_hashes(version: str) -> None:
     """Committed provenance inputs hash to the values recorded at build time, up to line endings."""
-    record = json.loads((PROVENANCE / f"release_{version}.json").read_text(encoding="utf-8"))
+    record = tracked_provenance(version)
     for name, recorded in record["input_sha256"].items():
         path = PROVENANCE / name
         if path.is_file():
@@ -161,3 +169,31 @@ def test_formatter_runs_on_real_rows_and_returns_the_requested_window(release: R
     assert target in selected and 1 <= len(selected) <= 11
     rendered = formatter.format(target, 5, 5, "window_letters")
     assert rendered.count("[T]") == 1 and len(rendered.splitlines()) == len(selected)
+
+
+def test_build_manifest_matches_the_release_when_present(version: str) -> None:
+    """The pipeline manifest records this release's fingerprint and file hashes."""
+    path = DATA_ROOT / "interim" / "build_manifest.json"
+    if not path.is_file():
+        pytest.skip("no pipeline manifest for this folder")
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    if manifest["data_version"] != version:
+        pytest.skip(f"manifest describes {manifest['data_version']}, not {version}")
+    assert manifest["release_fingerprint"] == digest(release_dir(version) / "checksums.sha256")
+    for name in RELEASE_FILES:
+        assert manifest["files"][f"{version}/{name}"]["sha256"] == digest(release_dir(version) / name)
+
+
+def test_release_rows_carry_no_non_speech_flags_and_no_empty_text(release: ReleaseData) -> None:
+    """Cleaning removed those rows and flags, so none may remain in the release."""
+    flags = {"is_nonspeech", "is_nonlabeled", "is_empty"}
+    assert not any(flags & set(row) for row in release.rows)
+    assert all(row["text"] for row in release.rows)
+
+
+def test_positions_strictly_increase_within_each_meeting(release: ReleaseData) -> None:
+    """Positions keep the original order, with gaps allowed where rows were removed."""
+    last: dict[str, int] = {}
+    for row in release.rows:
+        assert row["position"] > last.get(row["meeting"], -1)
+        last[row["meeting"]] = row["position"]

@@ -20,9 +20,6 @@ def formatter_row(
     position: int,
     speaker: str,
     text: str,
-    *,
-    nonspeech: bool = False,
-    empty: bool = False,
 ) -> dict[str, Any]:
     return {
         "seg_id": seg_id,
@@ -31,8 +28,6 @@ def formatter_row(
         "speaker_id": speaker,
         "text": text,
         "source_da_id": f"SOURCE-{seg_id}",
-        "is_nonspeech": nonspeech,
-        "is_empty": empty,
         "label": "SECRET_LABEL",
         "target_tags": ["SECRET_TAG"],
         "links": ["SECRET_LINK"],
@@ -85,8 +80,6 @@ def make_row(
         "is_layer2_proposal": proposal,
         "general_tags": [],
         "disruption_markers": [],
-        "is_nonspeech": False,
-        "is_empty": text == "",
     }
 
 

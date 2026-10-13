@@ -10,8 +10,6 @@ def row(
     speaker,
     text,
     *,
-    nonspeech=False,
-    empty=False,
     source_da_id=None,
 ):
     return {
@@ -21,8 +19,6 @@ def row(
         "speaker_id": speaker,
         "text": text,
         "source_da_id": source_da_id or seg_id,
-        "is_nonspeech": nonspeech,
-        "is_empty": empty,
         "label": "SECRET_LABEL",
         "target_tags": ["SECRET_TAG"],
         "links": ["SECRET_LINK"],
@@ -35,10 +31,10 @@ class ContextFormatterTests(unittest.TestCase):
     def setUp(self):
         self.rows = [
             row("m1-a", "m1", 0, "p1", "Earlier"),
-            row("m1-b", "m1", 1, "p2", "Noise", nonspeech=True),
+            row("m1-b", "m1", 1, "p2", "Noise"),
             row("m1-c", "m1", 2, "p1", "Target"),
             row("m1-d", "m1", 3, "p3", "Later"),
-            row("m1-e", "m1", 4, "p2", "Empty", empty=True),
+            row("m1-e", "m1", 4, "p2", "Last"),
             row("m2-a", "m2", 0, "p4", "Other meeting"),
         ]
         self.formatter = ContextFormatter(reversed(self.rows))
@@ -49,48 +45,29 @@ class ContextFormatterTests(unittest.TestCase):
     def test_windows_follow_position_and_stop_at_meeting_boundaries(self):
         self.assertEqual(
             self.formatter.select_context("m1-c", 1, 1),
-            ["m1-a", "m1-c", "m1-d"],
+            ["m1-b", "m1-c", "m1-d"],
         )
-        self.assertEqual(self.formatter.select_context("m1-c", 2, 0), ["m1-a", "m1-c"])
-        self.assertEqual(self.formatter.select_context("m1-c", 0, 2), ["m1-c", "m1-d"])
+        self.assertEqual(self.formatter.select_context("m1-c", 2, 0), ["m1-a", "m1-b", "m1-c"])
+        self.assertEqual(self.formatter.select_context("m1-c", 0, 2), ["m1-c", "m1-d", "m1-e"])
         self.assertEqual(self.formatter.select_context("m1-a", 2, 0), ["m1-a"])
         self.assertEqual(self.formatter.select_context("m1-e", 0, 2), ["m1-e"])
 
-    def test_drop_skips_flagged_neighbors_but_keeps_flagged_target(self):
-        self.assertEqual(
-            self.formatter.select_context("m1-c", 2, 2, "drop"),
-            ["m1-a", "m1-c", "m1-d"],
-        )
-        self.assertEqual(
-            self.formatter.select_context("m1-b", 1, 1, "drop"),
-            ["m1-a", "m1-b", "m1-c"],
-        )
-
-    def test_placeholder_counts_and_renders_flagged_units(self):
-        expected_ids = ["m1-a", "m1-b", "m1-c", "m1-d", "m1-e"]
-        actual_ids = self.formatter.select_context("m1-c", 2, 2, "placeholder")
-        self.assertEqual(actual_ids, expected_ids)
-        rendered = self.formatter.format("m1-c", 2, 2, "window_letters", nonspeech="placeholder")
-        self.assertIn("Speaker B: [nonverbal]", rendered)
-        self.assertEqual(rendered.count("[nonverbal]"), 2)
-        self.assertIn("[T]Target[/T]", rendered)
-
     def test_speaker_modes_and_zero_window(self):
         self.assertEqual(
-            self.formatter.format("m1-c", 2, 1, "raw", nonspeech="placeholder"),
+            self.formatter.format("m1-c", 2, 1, "raw"),
             "Speaker p1: Earlier\n"
-            "Speaker p2: [nonverbal]\n"
+            "Speaker p2: Noise\n"
             "Speaker p1: [T]Target[/T]\n"
             "Speaker p3: Later",
         )
         self.assertIn(
             "Speaker SAME: [T]Target[/T]",
-            self.formatter.format("m1-c", 2, 1, "relative", nonspeech="placeholder"),
+            self.formatter.format("m1-c", 2, 1, "relative"),
         )
         self.assertEqual(
-            self.formatter.format("m1-c", 2, 1, "window_letters", nonspeech="placeholder"),
+            self.formatter.format("m1-c", 2, 1, "window_letters"),
             "Speaker A: Earlier\n"
-            "Speaker B: [nonverbal]\n"
+            "Speaker B: Noise\n"
             "Speaker A: [T]Target[/T]\n"
             "Speaker C: Later",
         )

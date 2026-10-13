@@ -58,8 +58,6 @@ def make_row(
         "is_layer2_proposal": proposal,
         "general_tags": [],
         "disruption_markers": [],
-        "is_nonspeech": False,
-        "is_empty": False,
         "split": split,
         "fold": fold,
     }
@@ -248,13 +246,6 @@ class ReleaseBuilderTests(unittest.TestCase):
             c2_row.pop("fold")
             c2_rows.append(c2_row)
 
-        c2_rows[0]["general_tags"] = ["z"]
-        c2_rows[0].pop("is_nonspeech")
-        c2_rows[0].pop("is_empty")
-        c2_rows[1]["text"] = ""
-        c2_rows[1].pop("is_nonspeech")
-        c2_rows[1].pop("is_empty")
-
         split_provenance = build_split_provenance(
             ["m1"],
             {"train": ["m1"], "val": [], "test": []},
@@ -341,10 +332,8 @@ class ReleaseBuilderTests(unittest.TestCase):
             )
 
             release = load_release(final_output)
-            self.assertTrue(release.rows[0]["is_nonspeech"])
-            self.assertFalse(release.rows[0]["is_empty"])
-            self.assertFalse(release.rows[1]["is_nonspeech"])
-            self.assertTrue(release.rows[1]["is_empty"])
+            for row in release.rows:
+                self.assertFalse({"is_nonspeech", "is_nonlabeled", "is_empty"} & set(row))
 
             provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
             self.assertEqual(provenance["release_fingerprint"], release_fingerprint)
@@ -417,8 +406,6 @@ class C2CompletionTests(unittest.TestCase):
 
             task2_rows_path = root / "task2_rows.jsonl"
             partial_task2_row = dict(rows[0])
-            partial_task2_row.pop("is_nonspeech")
-            partial_task2_row.pop("is_empty")
             task2_rows_path.write_text(json.dumps(partial_task2_row) + "\n", encoding="utf-8")
             c1_rows_path = root / "c1_rows.jsonl"
             c1_rows_path.write_text(
@@ -444,8 +431,6 @@ class C2CompletionTests(unittest.TestCase):
             self.assertEqual([row["seg_id"] for row in completed], ["m1-p", "m1-r"])
             self.assertFalse(completed[0]["is_nonlabeled"])
             self.assertTrue(completed[1]["is_nonlabeled"])
-            self.assertFalse(completed[0]["is_nonspeech"])
-            self.assertFalse(completed[0]["is_empty"])
             self.assertNotIn("split", completed[1])
             self.assertEqual(
                 json.loads(provenance_path.read_text(encoding="utf-8"))["output"]["backfilled_rows"],

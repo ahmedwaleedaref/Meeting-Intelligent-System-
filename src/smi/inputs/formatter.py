@@ -7,7 +7,6 @@ from dataclasses import dataclass
 
 
 _SPEAKER_MODES = {"raw", "relative", "window_letters"}
-_NONSPEECH_POLICIES = {"drop", "placeholder"}
 
 
 @dataclass(frozen=True)
@@ -17,7 +16,6 @@ class _Unit:
     position: int
     speaker_id: str
     text: str
-    flagged: bool
 
 
 class ContextFormatter:
@@ -39,8 +37,6 @@ class ContextFormatter:
             position = row.get("position")
             speaker_id = row.get("speaker_id")
             text = row.get("text")
-            is_nonspeech = row.get("is_nonspeech")
-            is_empty = row.get("is_empty")
 
             if not isinstance(seg_id, str) or not seg_id:
                 raise ValueError("every row must have a non-empty seg_id")
@@ -56,10 +52,6 @@ class ContextFormatter:
                 raise ValueError(f"row {seg_id!r} must have a non-empty speaker_id")
             if not isinstance(text, str):
                 raise ValueError(f"row {seg_id!r} must have text as a string")
-            if type(is_nonspeech) is not bool or type(is_empty) is not bool:
-                raise ValueError(
-                    f"row {seg_id!r} must have boolean is_nonspeech and is_empty fields"
-                )
 
             seen_ids.add(seg_id)
             seen_positions.add((meeting, position))
@@ -70,7 +62,6 @@ class ContextFormatter:
                     position=position,
                     speaker_id=speaker_id,
                     text=text,
-                    flagged=is_nonspeech or is_empty,
                 )
             )
 
@@ -93,20 +84,11 @@ class ContextFormatter:
         seg_id: str,
         k_left: int,
         k_right: int,
-        nonspeech: str = "drop",
     ) -> list[str]:
         """Return selected unit IDs in stream order, always including the target."""
-        self._validate_window(k_left, k_right, nonspeech)
+        self._validate_window(k_left, k_right)
         target = self._get_target(seg_id)
-        meeting_units = self._by_meeting[target.meeting]
-
-        if nonspeech == "drop":
-            stream = []
-            for unit in meeting_units:
-                if not unit.flagged or unit.seg_id == seg_id:
-                    stream.append(unit)
-        else:
-            stream = meeting_units
+        stream = self._by_meeting[target.meeting]
 
         target_index = 0
         for index, unit in enumerate(stream):
@@ -127,14 +109,12 @@ class ContextFormatter:
         k_left: int,
         k_right: int,
         speaker_mode: str,
-        *,
-        nonspeech: str = "drop",
     ) -> str:
         """Render a context window without exposing annotations or split fields."""
         if speaker_mode not in _SPEAKER_MODES:
             raise ValueError(f"speaker_mode must be one of {sorted(_SPEAKER_MODES)}")
 
-        selected_ids = self.select_context(seg_id, k_left, k_right, nonspeech)
+        selected_ids = self.select_context(seg_id, k_left, k_right)
         selected = []
         for item_id in selected_ids:
             selected.append(self._by_id[item_id])
@@ -145,8 +125,6 @@ class ContextFormatter:
         lines = []
         for unit in selected:
             content = unit.text
-            if nonspeech == "placeholder" and unit.flagged:
-                content = "[nonverbal]"
             if unit.seg_id == seg_id:
                 content = f"[T]{content}[/T]"
 
@@ -175,12 +153,10 @@ class ContextFormatter:
             raise KeyError(f"unknown seg_id: {seg_id!r}") from error
 
     @staticmethod
-    def _validate_window(k_left: int, k_right: int, nonspeech: str) -> None:
+    def _validate_window(k_left: int, k_right: int) -> None:
         for name, value in (("k_left", k_left), ("k_right", k_right)):
             if type(value) is not int or value < 0:
                 raise ValueError(f"{name} must be a non-negative integer")
-        if nonspeech not in _NONSPEECH_POLICIES:
-            raise ValueError(f"nonspeech must be one of {sorted(_NONSPEECH_POLICIES)}")
 
     @staticmethod
     def _window_letter(index: int) -> str:

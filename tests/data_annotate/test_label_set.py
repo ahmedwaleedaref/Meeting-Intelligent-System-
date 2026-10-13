@@ -53,7 +53,7 @@ def test_unknown_tags_fall_back_to_other() -> None:
 def test_tag_mapping_is_read_only() -> None:
     """The shared mapping cannot be edited at runtime."""
     with pytest.raises(TypeError):
-        labels.RAW_TAG_TO_LABEL["new"] = "cs"  # type: ignore[index]
+        labels.RAW_TAG_TO_LABEL["new"] = "cs"
 
 
 def test_nothing_else_in_the_repo_redefines_labels() -> None:
