@@ -153,11 +153,6 @@ def test_released_split_hash_matches_the_committed_file_bytes(version: str) -> N
     assert recorded == sha256_of(SPLIT_FILE.read_bytes())
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="write_split_provenance calls write_text without newline='\\n', so Windows writes CRLF; "
-    "every other writer in the repo sets newline='\\n'",
-)
 def test_split_provenance_is_written_with_explicit_lf_endings(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, provenance: dict[str, Any]
 ) -> None:

@@ -36,7 +36,7 @@ ICSI_core_NXT.zip + NXT XML (DialogueActs, Words) + MRDA transcripts (*.trans)
   the context formatter. It also owns the one-command pipeline (`scripts/run_pipeline.py`).
 - **Reproducible.** The same archive and code give byte-identical files. The source archive and
   each stage's output are fingerprinted; the pipeline compares them with the committed values.
-- **Tested.** 542 automated tests across the three tasks and the pipeline (Section 8).
+- **Tested.** 543 automated tests across the three tasks and the pipeline (Section 8).
 
 Current build: `data/v3`, 115,874 rows, 3,831 links, release fingerprint
 `b4a72c6a0a9a173a7680e95f9757bcf3bf32a53850fca6d9aaaaf9c9d4786c9b`. Generated data is never
@@ -295,20 +295,21 @@ checkout. Prefer the pipeline. See [parser_usage.md](parser_usage.md) for the pa
 
 ## 8. Tests and validation
 
-542 tests in `tests/`, run with `python -m pytest tests -q`. Fixtures are small hand-written
+543 tests in `tests/`, run with `python -m pytest tests -q`. Fixtures are small hand-written
 files, never corpus excerpts.
 
 | Folder | Tests | Covers |
 |---|---|---|
 | `tests/data_nxt` | 64 | Parsing a hand-built NXT corpus, every error flag, ids, order, report, serialisation |
-| `tests/data_annotate` | 194 | Classes, flags, tags, every link scenario, contract, cleaning, report, scripts |
+| `tests/data_annotate` | 195 | Classes, flags, tags, every link scenario, contract, cleaning, report, scripts |
 | `tests/data_release` | 259 | Formatter, splits, over 60 validator checks, release build, Layer-2 view, committed releases |
 | `tests/pipeline` | 25 | The whole chain on a 75-meeting toy corpus: counts, identical reruns, refusals |
 
 - Tests that need generated data (`data/vN`, `data/interim`, the raw corpus) skip when it is
   absent, so run the pipeline first to exercise them.
-- 4 tests are strict expected failures that mark known problems (Section 10).
-- Latest run on the real `data/v3`: 533 passed, 5 skipped, 4 expected failures. Run in a clean
+- 2 tests are strict expected failures that mark the two missing documents, `schema/02` and the MRDA
+  concept note (Section 10). Each starts failing once its file exists, as a reminder to remove the marker.
+- Latest run on the real `data/v3`: 536 passed, 5 skipped, 2 expected failures. Run in a clean
   `git clone` with the pending changes laid over it, only the data-dependent tests skipped. A one-off check with 20
   deliberately injected faults across the three tasks (run before the latest Task 3 changes)
   caught all 20.
@@ -353,12 +354,10 @@ records, which each lose one reply row. No proposal is removed.
 - **Missing deliverables:** `schema/02_annotations_links.md` (until it exists, Section 3.2's field
   table is the reference), the MRDA concept note, `pyproject.toml`, the root README row, and the
   check that every field is documented in exactly one schema.
-- **Known defects** (the first two are strict expected failures in the tests):
-  `build_cleaning_report` miscounts when an early proposal is dropped (not triggered on real data);
-  `write_split_provenance` omits `newline="\n"`, so Windows writes CRLF (the pipeline normalises it);
-  `c2.json` still says Task 2 regeneration was unavailable although the pipeline now reproduces its
-  hashes; `c2_clean.json` names a commit that predates `clean_rows.py`; one PDF is tracked by
-  accident; `complete_c2_rows.py` is obsolete.
+- **Known issues:** `annotate_rows.py` and `clean_rows.py` record `git rev-parse HEAD`, so they and
+  4 of their tests need a git checkout (a copy without `.git` fails them; the pipeline does not);
+  `reports/annotation_semantics_report/annotation_semantics_report.pdf` (the October Task 2 progress
+  report, 6 pages) is tracked but linked from nowhere.
 - **Environment:** the two raw-corpus tests look for the data at `data/raw/icsi_core_nxt`; data
   tests skip on a machine without generated data.
 

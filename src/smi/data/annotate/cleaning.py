@@ -104,9 +104,12 @@ def build_cleaning_report(
     labels_after = Counter(row["label"] for row in cleaned)
     status_before = Counter(link["status"] for link in annotated_links)
     status_after = Counter(link["status"] for link in cleaned_links)
+    cleaned_by_id = {link["proposal_id"]: link for link in cleaned_links}
     touched = sum(
-        sum(map(len, a["responder_chains"])) != sum(map(len, b["responder_chains"]))
-        for a, b in zip(annotated_links, cleaned_links)
+        sum(map(len, link["responder_chains"]))
+        != sum(map(len, cleaned_by_id[link["proposal_id"]]["responder_chains"]))
+        for link in annotated_links
+        if link["proposal_id"] in cleaned_by_id
     )
     lines = [
         "# Cleaning report", "",

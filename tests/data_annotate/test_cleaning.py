@@ -150,11 +150,6 @@ def test_cleaning_report_is_reproducible(case: tuple[list[Any], list[Any]]) -> N
     assert build_cleaning_report(*args) == build_cleaning_report(*args)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="build_cleaning_report pairs annotated and cleaned links by position, so a dropped proposal "
-    "earlier in the file shifts the pairing and miscounts the touched records",
-)
 def test_cleaning_report_counts_touched_records_when_an_early_proposal_is_dropped() -> None:
     """A dropped proposal before an untouched one must not change the touched-record count."""
     parsed = meeting_parsed([("e", None, "s^cs"), ("p", "1a", "s^cs"), ("r", "1b", "s^aa")])
@@ -163,3 +158,13 @@ def test_cleaning_report_counts_touched_records_when_an_early_proposal_is_droppe
     links = build_links(rows, build_groups(rows))
     text = build_cleaning_report(rows, links, clean_rows(rows), clean_links(links, rows))
     assert "- Records that lost at least one reply row: 0" in text
+
+
+def test_cleaning_report_counts_a_kept_record_that_lost_a_reply_after_an_early_drop() -> None:
+    """A real lost reply is counted once even when an earlier proposal was dropped."""
+    parsed = meeting_parsed([("e", None, "s^cs"), ("p", "1a", "s^cs"), ("z", "1b-1", "z"), ("r", "1b-2", "s^aa")])
+    parsed[0]["text"] = ""
+    rows = [annotate_row(row) for row in parsed]
+    links = build_links(rows, build_groups(rows))
+    text = build_cleaning_report(rows, links, clean_rows(rows), clean_links(links, rows))
+    assert "- Records that lost at least one reply row: 1" in text

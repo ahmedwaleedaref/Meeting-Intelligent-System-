@@ -1,4 +1,9 @@
-"""Restore C1 rows omitted from a partial Task 2 export using frozen v1 rows."""
+"""OBSOLETE: restore C1 rows omitted from a partial Task 2 export using frozen v1 rows.
+
+This built the former v2 release. The current pipeline (scripts/run_pipeline.py) releases the cleaned
+rows directly and does not use this script, and the frozen v1 rows it needs were removed from the repo.
+It is kept only as the record of how v2 was made (provenance/c2_v2_completion.json).
+"""
 
 from __future__ import annotations
 

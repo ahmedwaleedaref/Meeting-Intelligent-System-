@@ -316,4 +316,5 @@ def write_split_provenance(provenance: Mapping[str, object], path: str | Path) -
     output.write_text(
         json.dumps(provenance, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
+        newline="\n",
     )

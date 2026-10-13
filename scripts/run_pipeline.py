@@ -177,7 +177,6 @@ def stage_split(config: PipelineConfig) -> Path:
         metadata_path.write_bytes(archive.read(METADATA_IN_ARCHIVE))
     split_path = folder / "split.json"
     make_splits(metadata_path, split_path)
-    split_path.write_bytes(split_path.read_bytes().replace(b"\r\n", b"\n"))
     meetings = load_meeting_ids(metadata_path)
     committed = config.provenance_dir / "split_v1.json"
     same = committed.is_file() and read_json(committed) == read_json(split_path)
