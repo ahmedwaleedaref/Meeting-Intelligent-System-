@@ -3,9 +3,9 @@
 ## Context formatter output
 
 `ContextFormatter` is constructed from a fixed snapshot of C3 rows. Its
-`select_context(seg_id, k_left, k_right, nonspeech="drop")` method returns
+`select_context(seg_id, k_left, k_right)` method returns
 selected `seg_id` values in meeting `position` order. Its
-`format(seg_id, k_left, k_right, speaker_mode, *, nonspeech="drop")` method
+`format(seg_id, k_left, k_right, speaker_mode)` method
 renders those rows for a model.
 
 Each selected row is rendered on one line. Lines are joined by a single LF
@@ -24,13 +24,12 @@ relative to the target speaker in `relative` mode, or a window-local letter
 (`A`, `B`, …) in `window_letters` mode. Window letters are assigned on first
 appearance from left to right.
 
-With `nonspeech="placeholder"`, a row whose `is_nonspeech` or `is_empty` flag
-is true has content `[nonverbal]`. The target remains selected under both
-non-speech policies, including when it is flagged. With `nonspeech="drop"`,
-flagged non-target rows are removed before context counts are applied.
+Non-speech (`z`, whole-label `x`) and empty rows are removed by Task 2 cleaning
+before a release is built, so every row of a meeting is a context unit and the
+formatter has no non-speech policy and no `[nonverbal]` placeholder.
 
 Formatted text contains only rendered source text, target markers, optional
-speaker prefixes, and the `[nonverbal]` placeholder. Gold labels, tags, links,
+and speaker prefixes. Gold labels, tags, links,
 split, and fold fields are never emitted.
 
 ## Split provenance
@@ -46,10 +45,19 @@ replacement policy, not the unavailable Table 9 list.
 
 ## C3 release files
 
+Release rows come from Task 2's cleaned output. The three flags `is_nonspeech`,
+`is_nonlabeled` and `is_empty` do not exist in a release. Cleaning keeps each
+row's original `seg_id` and `position`, which leaves gaps. The release step then
+renumbers `position` from 0 to n−1 within each meeting in the existing order, so
+a release's positions are continuous. `seg_id` is never renumbered, and a link's
+`pair_group` id still shows the pre-renumbering position. The validator rejects any
+meeting whose positions are not exactly 0 to n−1, so cleaned rows with gaps cannot be
+released until they are renumbered.
+
 Each `data/vN/` release directory (for example `data/v1/` or `data/v2/`)
 contains exactly these five files:
 
-- `rows.jsonl`: every C2 row unchanged, with `split` and `fold` appended.
+- `rows.jsonl`: every cleaned C2 row unchanged, with `split` and `fold` appended.
   Train and validation folds are integers in `[0, k)`; test folds are `null`.
 - `links.jsonl`: C2 link records, unchanged.
 - `splits.json`: `k`, `grouping: "meeting"`, a `meetings` object mapping each
