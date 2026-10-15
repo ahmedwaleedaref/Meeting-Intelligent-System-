@@ -1,7 +1,25 @@
-"""The 7-class label set. Defined here once and imported by data, models and eval."""
+"""Label definitions for the MRDA tag -> class mapping."""
 
-# Fixed order: also the row/column order of the confusion matrix.
-LABELS: tuple[str, ...] = ("cs", "co", "aa", "bk", "ar", "cc", "other")
+from types import MappingProxyType
+from typing import Final
 
-# The 6 target classes; the primary metric is macro-F1 over these.
-TARGET_LABELS: tuple[str, ...] = ("cs", "co", "aa", "bk", "ar", "cc")
+LABELS: Final[tuple[str, ...]] = ("cs", "co", "aa", "bk", "ar", "cc", "other")
+
+# Difference between LABELS and TARGET_LABELS is that the latter does not include "other". Will be used for evaluation metrics.
+ 
+TARGET_LABELS: Final[tuple[str, ...]] = ("cs", "co", "aa", "bk", "ar", "cc")
+
+RAW_TAG_TO_LABEL: Final = MappingProxyType({
+    "cs": "cs",
+    "co": "co",
+    "aa": "aa",
+    "bk": "bk",
+    "ar": "ar",
+    "cc": "cc",
+    "aap": "aa",
+    "arp": "ar"
+})
+
+
+def get_label_from_raw_tag(raw_tag: str) -> str:
+    return RAW_TAG_TO_LABEL.get(raw_tag, "other")

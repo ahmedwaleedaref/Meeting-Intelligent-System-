@@ -63,18 +63,12 @@ def per_class_metrics(records: dict[str, dict], gold: dict[str, str]) -> dict[st
     return metrics 
 
 def macro_f1_6(class_metrics : dict[str, dict]) -> float :
-   F1 : float = 0
-   for key,value in class_metrics.items() :
-     if key == "other" : 
-       continue
-     F1 += value["f1"]
-   return F1 / len(TARGET_LABELS)
+   """mean F1 over the 6 target classes ; raises KeyError if a class is missing"""
+   return sum(class_metrics[label]["f1"] for label in TARGET_LABELS) / len(TARGET_LABELS)
 
 def macro_f1_7(class_metrics : dict[str, dict]) -> float :
-   F1 : float = 0
-   for value in class_metrics.values() : 
-     F1 += value["f1"]
-   return F1 / len(LABELS)
+   """mean F1 over all 7 classes ; raises KeyError if a class is missing"""
+   return sum(class_metrics[label]["f1"] for label in LABELS) / len(LABELS)
      
 def confusion_matrix(records: dict[str, dict], gold: dict[str, str]) -> list[list[int]]:
     """
