@@ -1,5 +1,4 @@
-import json
-
+from smi.jsonl import iter_jsonl
 from smi.labels import LABELS
 
 REQUIRED_KEYS = {"seg_id", "label", "scores"}
@@ -64,16 +63,9 @@ def load_predictions(path) -> dict[str , dict] :
     has_scores = None  # set by the first record; a file is all-scores or all-null
     
     with open(path , 'r' , encoding='utf-8') as prediction_file :
-        #for each line aka jason in file 
-        for line_no ,line in  enumerate(prediction_file, start=1) :
-            line = line.strip()
-            if not line:
-               continue 
-            try :
-               parsed_record = json.loads(line)
-            except json.JSONDecodeError as e:
-                raise PredictionFileError(f"line {line_no}: invalid JSON ({e.msg})") from e   
-            #from converting it we should do the validations 
+        # blank lines skipped , invalid JSON and repeated keys raise PredictionFileError
+        for line_no, parsed_record in iter_jsonl(prediction_file, error=PredictionFileError) :
+            #from converting it we should do the validations
             validate_one_parsed_json(parsed_record, line_no)
             seg_id = parsed_record['seg_id']
             if seg_id in records : 
@@ -87,6 +79,6 @@ def load_predictions(path) -> dict[str , dict] :
                 "label" : parsed_record["label"],
                 "scores":parsed_record["scores"]
             }
-            records[seg_id] = temp_dict 
-        
-        return records 
+            records[seg_id] = temp_dict
+
+        return records

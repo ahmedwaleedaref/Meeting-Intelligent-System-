@@ -210,6 +210,14 @@ def test_duplicate_seg_id_raises(tmp_path):
         load_predictions(path)
 
 
+def test_key_repeated_inside_one_record_raises(tmp_path):
+    # Python's json keeps the last value of a repeated key without complaining, so the loader must catch it
+    path = write_jsonl(tmp_path, ['{"seg_id": "a", "label": "cs", "scores": null, "label": "bk"}'])
+
+    with pytest.raises(PredictionFileError, match=r"^line 1: duplicate key 'label'"):
+        load_predictions(path)
+
+
 @pytest.mark.parametrize("first_scores, second_scores", [
     pytest.param(valid_scores(), None, id="scores-then-null"),
     pytest.param(None, valid_scores(), id="null-then-scores"),

@@ -15,35 +15,19 @@ Run from the repo root:   python -m pytest tests/eval -v
 import json  
 import random 
 
-import pytest 
-import sklearn.metrics as sk  # required (requirements.txt): a missing sklearn must fail, not skip
+import pytest
 
-from smi.eval.layer1_metrics import (  
-    confusion_matrix, 
-    macro_f1_6, 
-    macro_f1_7, 
-    per_class_metrics,  
-    prf_from_sets,  
-    row_normalised,  
+from helpers import as_records, assert_matches_sklearn, assert_matrix_close  # shared with test_real_data.py
+from smi.eval.layer1_metrics import (
+    confusion_matrix,
+    macro_f1_6,
+    macro_f1_7,
+    per_class_metrics,
+    prf_from_sets,
+    row_normalised,
 )
-from smi.eval.prediction_schema import load_predictions 
-from smi.labels import LABELS, TARGET_LABELS 
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def as_records(predicted: dict[str, str]) -> dict[str, dict]:
-    """Turn {seg_id: label} into the shape load_predictions returns: {seg_id: {"label", "scores"}}."""
-    return {seg_id: {"label": label, "scores": None} for seg_id, label in predicted.items()}
-
-
-def assert_matrix_close(actual: list[list[float]], expected: list[list[float]]) -> None:
-    """Check two matrices are equal row by row, allowing tiny float rounding differences."""
-    assert len(actual) == len(expected)  # same number of rows
-    for actual_row, expected_row in zip(actual, expected):  # walk both matrices row by row
-        assert actual_row == pytest.approx(expected_row)  # approx: 1/3 written two ways still counts as equal
+from smi.eval.prediction_schema import load_predictions
+from smi.labels import LABELS, TARGET_LABELS
 
 
 # ---------------------------------------------------------------------------
@@ -165,6 +149,28 @@ def test_mismatched_seg_ids_raise(metric_function, change):
         metric_function(as_records(predicted), TOY_GOLD)
 
 
+@pytest.mark.parametrize("metric_function", [per_class_metrics, confusion_matrix])
+def test_mismatch_message_counts_and_names_the_ids(metric_function):
+    predicted = dict(TOY_PRED)
+    del predicted["Bmr001_20"]
+    predicted["Bmr001_99"] = "cs"
+
+    # the message must say how many are missing / extra and which ones, so the user can find them
+    with pytest.raises(ValueError, match=r"1 missing from predictions \['Bmr001_20'\], 1 not in gold \['Bmr001_99'\]"):
+        metric_function(as_records(predicted), TOY_GOLD)
+
+
+@pytest.mark.parametrize("metric_function", [per_class_metrics, confusion_matrix])
+@pytest.mark.parametrize("side", ["predicted", "gold"])
+def test_label_outside_label_set_raises(metric_function, side):
+    # records and gold built by hand skip the loaders' checks; an unknown label must not silently drop out
+    predicted, gold = dict(TOY_PRED), dict(TOY_GOLD)
+    (predicted if side == "predicted" else gold)["Bdb001_01"] = "CS"
+
+    with pytest.raises(ValueError, match=r"labels not in .*\['CS'\]"):
+        metric_function(as_records(predicted), gold)
+
+
 # ---------------------------------------------------------------------------
 # test 1: perfect predictions -> every F1 = 1.0
 # Decision: TOY_GOLD contains all 7 classes. A class with no gold and no predictions
@@ -281,7 +287,7 @@ def test_target_labels_are_labels_without_other():
 
 # ---------------------------------------------------------------------------
 # test 5: every number cross-checked against sklearn.metrics on random predictions.
-# Needs scikit-learn (requirements.txt); it is imported at the top, so a missing install fails loudly.
+# Needs scikit-learn (requirements.txt); helpers.py imports it, so a missing install fails loudly.
 # Sizes: 15 segments (some classes absent -> tests the zero-division cases) and 500 segments.
 # ---------------------------------------------------------------------------
 
@@ -301,36 +307,5 @@ def random_gold_and_pred(n_segments: int, seed: int) -> tuple[dict[str, str], di
 @pytest.mark.parametrize("seed", [0, 1, 2])
 def test_matches_sklearn(n_segments, seed):
     gold, pred = random_gold_and_pred(n_segments, seed)
-    seg_ids = list(gold)  # one fixed order, used to build sklearn's two aligned lists
-    y_true = [gold[s] for s in seg_ids]
-    y_pred = [pred[s] for s in seg_ids]
 
-    ours = per_class_metrics(as_records(pred), gold)
-
-    # per-class P / R / F1 / support, with sklearn's zero_division=0 to match our rule
-    p, r, f1, support = sk.precision_recall_fscore_support(
-        y_true, y_pred, labels=list(LABELS), average=None, zero_division=0
-    )
-    for i, label in enumerate(LABELS):
-        assert ours[label]["p"] == pytest.approx(p[i]), label
-        assert ours[label]["r"] == pytest.approx(r[i]), label
-        assert ours[label]["f1"] == pytest.approx(f1[i]), label
-        assert ours[label]["support"] == support[i], label
-
-    # macro-F1 over the 6 targets and over all 7 classes
-    assert macro_f1_6(ours) == pytest.approx(
-        sk.f1_score(y_true, y_pred, labels=list(TARGET_LABELS), average="macro", zero_division=0)
-    )
-    assert macro_f1_7(ours) == pytest.approx(
-        sk.f1_score(y_true, y_pred, labels=list(LABELS), average="macro", zero_division=0)
-    )
-
-    # confusion matrix (sklearn also uses rows = gold, columns = predicted)
-    ours_counts = confusion_matrix(as_records(pred), gold)
-    assert ours_counts == sk.confusion_matrix(y_true, y_pred, labels=list(LABELS)).tolist()
-
-    # row-normalised matrix (sklearn's normalize="true" also turns empty rows into 0)
-    assert_matrix_close(
-        row_normalised(ours_counts),
-        sk.confusion_matrix(y_true, y_pred, labels=list(LABELS), normalize="true").tolist(),
-    )
+    assert_matches_sklearn(gold, pred)  # per-class P/R/F1/support, both macros, raw + row-normalised confusion
