@@ -61,6 +61,41 @@ def test_duplicate_seg_id_across_meetings_raises(tmp_path):
         load_gold(tmp_path)
 
 
+@pytest.mark.parametrize("line", [
+    pytest.param('{"seg_id": "a"}', id="missing-label"),
+    pytest.param('{"label": "cs"}', id="missing-seg_id"),
+    pytest.param('["a", "cs"]', id="row-is-a-list"),
+])
+def test_malformed_row_names_file_and_line(tmp_path, line):
+    write_meeting(tmp_path / "M1.jsonl", [("a0", "cs")], extra_lines=[line])
+    with pytest.raises(ValueError, match="M1.jsonl line 2: expected an object with seg_id and label"):
+        load_gold(tmp_path)
+
+
+def test_seg_id_not_a_string_raises(tmp_path):
+    write_meeting(tmp_path / "M1.jsonl", [], extra_lines=['{"seg_id": 7, "label": "cs"}'])
+    with pytest.raises(ValueError, match="M1.jsonl line 1: seg_id must be a non-empty string"):
+        load_gold(tmp_path)
+
+
+def test_key_repeated_inside_one_row_raises(tmp_path):
+    write_meeting(tmp_path / "M1.jsonl", [], extra_lines=['{"seg_id": "a", "label": "cs", "label": "bk"}'])
+    with pytest.raises(ValueError, match="M1.jsonl line 1: duplicate key 'label'"):
+        load_gold(tmp_path)
+
+
+def test_test_split_folder_needs_allow_test(tmp_path):
+    test_dir = tmp_path / "test"
+    test_dir.mkdir()
+    write_meeting(test_dir / "M1.jsonl", [("a", "cs")])
+
+    with pytest.raises(ValueError, match="allow_test=True"):  # PROTOCOL §7: never read by accident
+        load_gold(test_dir)
+    with pytest.raises(ValueError, match="allow_test=True"):  # one meeting file inside test/ counts too
+        load_gold(test_dir / "M1.jsonl")
+    assert load_gold(test_dir, allow_test=True) == {"a": "cs"}
+
+
 def test_unknown_label_raises(tmp_path):
     write_meeting(tmp_path / "M1.jsonl", [("a", "aap")])  # raw MRDA tag, not one of the 7 classes
     with pytest.raises(ValueError, match="not in"):
