@@ -17,5 +17,19 @@ wandb/
 # Data and run outputs (keep folders only)
 data/*
 !data/.gitkeep
+!data/v1/
+data/v1/*
+!data/v1/rows.jsonl
+!data/v1/links.jsonl
+!data/v1/splits.json
+!data/v1/metadata.json
+!data/v1/checksums.sha256
+!data/v2/
+data/v2/*
+!data/v2/rows.jsonl
+!data/v2/links.jsonl
+!data/v2/splits.json
+!data/v2/metadata.json
+!data/v2/checksums.sha256
 runs/*
 !runs/.gitkeep

@@ -1,0 +1,2 @@
+data/v*/* text eol=lf
+data/v*/rows.jsonl filter=lfs diff=lfs merge=lfs -text

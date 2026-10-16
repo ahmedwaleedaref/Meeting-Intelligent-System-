@@ -1,0 +1,6 @@
+{
+  "path": "data/interim/parsed/rows.jsonl",
+  "sha256": "de1711a720d2a121a2279d3ff105a758308af71d6189fecad0663c4d131fbb64",
+  "row_count": 118694,
+  "producing_commit": "210280d526bba4ac8a25000380af488f0d163d64"
+}
