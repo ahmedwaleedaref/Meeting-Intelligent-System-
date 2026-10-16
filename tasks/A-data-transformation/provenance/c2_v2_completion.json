@@ -1,0 +1,36 @@
+{
+  "c1_rows": {
+    "path": "data/interim/parsed/rows.jsonl",
+    "row_count": 118694,
+    "sha256": "de1711a720d2a121a2279d3ff105a758308af71d6189fecad0663c4d131fbb64"
+  },
+  "method": "Use every current Task 2 row where present. For IDs absent from the new Task 2 export, reuse the row from frozen v1 after confirming it is not a Layer-2 proposal and has no link. For overlapping IDs, shared fields must exactly match frozen v1; fields omitted by the new export are retained from frozen v1.",
+  "output": {
+    "backfilled_rows": 2820,
+    "path": "data/interim/normalized/v2_rows.jsonl",
+    "row_count": 118694,
+    "sha256": "cce142e5a64fbf292b371cae4a314386a297b047a3ab33cbb7bb50ca5f5e8d89"
+  },
+  "overlap_fields_restored_from_v1": {
+    "is_empty": 115874,
+    "is_nonlabeled": 115874,
+    "is_nonspeech": 115874
+  },
+  "previous_release_rows": {
+    "path": "data/v1/rows.jsonl",
+    "release_fingerprint": "1b8b1fbc27e70c81e5ff7c710380138f1b05db7f2104e174e3a7141e2345c5bb",
+    "row_count": 118694,
+    "sha256": "ba916a5a2537b3da5721a7a99551fc1739d5cb529e4a254ff14de527279c6297"
+  },
+  "stage": "completed_c2_rows",
+  "task2_links": {
+    "path": "data/interim/annotated/links.jsonl",
+    "record_count": 3831,
+    "sha256": "75783ac4bc678a42d042b3a8ab58ffc9b0ae5851f913efa3609397e0e0be4124"
+  },
+  "task2_rows": {
+    "path": "data/interim/annotated/rows.jsonl",
+    "row_count": 115874,
+    "sha256": "337c7a1310dd354ccd799c362bb9fc1fbdf61dd8de98fd6ab8a07ef5005c4cc6"
+  }
+}
