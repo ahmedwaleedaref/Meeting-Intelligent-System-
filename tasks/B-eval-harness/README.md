@@ -34,7 +34,7 @@ Roles: design + implementation (owner), tests (one member, written from task.md)
 - 3-class level and `cs` + `co` pooled dropped from B2 for now — the 3-class representation will most likely not be kept.
 - Harness is threshold-free (argmax); threshold tuning, if any, is an experiment — keeps the harness model-agnostic.
 - `zero_division=0`: a class with no predictions gets precision 0, never NaN — keeps macro averages defined.
-- Evaluating `test` requires an explicit flag recorded in the output — PROTOCOL §7.
+- Test gold is read only through `load_gold(path, allow_test=True)`; a `test/` folder or a file inside one raises otherwise. `evaluate()` will pass its explicit test flag through and record it in the output — PROTOCOL §7; `load_gold` is the only gold entry point, so the guard sits there.
 - `seg_id` uniqueness is guaranteed by the data side (task A); the harness only rejects duplicates inside a prediction file — the harness checks files, not the corpus.
 - A prediction file is all-scores or all-null, never mixed; only prompting outputs may be null — a mixed file means a broken pipeline.
 - Coverage (missing / extra seg_ids vs the split) is enforced by `per_class_metrics` / `confusion_matrix`, which raise if prediction and gold IDs differ — no separate check needed.
