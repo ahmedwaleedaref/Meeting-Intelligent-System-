@@ -9,6 +9,7 @@ usage (from the repo root) :
 
 import argparse
 import json
+import math
 import statistics
 import time
 from pathlib import Path
@@ -66,16 +67,35 @@ def run_one_seed(seed: int, data_root: Path, model_name: str, run_dir: Path) -> 
         optimizer, train_loader, SETTINGS["epochs"], SETTINGS["warmup_ratio"], SETTINGS["grad_accum_steps"]
     )
 
-    selected_epoch, best_records, history = train(
-        model, train_loader, val_loader, val_gold, optimizer, scheduler,
-        SETTINGS["epochs"], SETTINGS["grad_accum_steps"], SETTINGS["max_grad_norm"], SETTINGS["log_every"],
-    )
-
     with open(run_dir / "settings.json", "x", encoding="utf-8") as f:
         json.dump({"seed": seed, "model": model_name, "data_root": str(data_root), **SETTINGS}, f, indent=2)
-    with open(run_dir / "history.jsonl", "x", encoding="utf-8") as f:
-        for line in history:
-            f.write(json.dumps(line) + "\n")
+
+    total_steps = SETTINGS["epochs"] * math.ceil(len(train_loader) / SETTINGS["grad_accum_steps"])
+    print(f"seed {seed}: {len(train_loader)} train batches per epoch , {total_steps} optimizer steps in total", flush=True)
+
+    # every history line is printed and appended to history.jsonl as soon as train creates it
+    history_file = open(run_dir / "history.jsonl", "x", encoding="utf-8")
+
+    def on_log(line: dict) -> None:
+        history_file.write(json.dumps(line) + "\n")
+        history_file.flush()
+        if line["type"] == "step":
+            print(f"  step {line['step']}/{total_steps} (epoch {line['epoch']}) | loss {line['train_loss']:.4f} "
+                  f"| lr {line['lr']:.2e} | grad_norm {line['grad_norm']:.2f} | {line['seconds'] / 60:.1f} min", flush=True)
+        else:
+            per_class = " ".join(f"{label} {f1:.3f}" for label, f1 in line["per_class_f1"].items())
+            print(f"EPOCH {line['epoch']} | train_loss {line['train_loss']:.4f} | val macro_f1_6 {line['macro_f1_6']:.4f} "
+                  f"| best {line['is_best']} | {line['seconds'] / 60:.1f} min\n  per-class F1: {per_class}", flush=True)
+
+    try:
+        selected_epoch, best_records, history = train(
+            model, train_loader, val_loader, val_gold, optimizer, scheduler,
+            SETTINGS["epochs"], SETTINGS["grad_accum_steps"], SETTINGS["max_grad_norm"], SETTINGS["log_every"],
+            on_log=on_log,
+        )
+    finally:
+        history_file.close()
+
     write_predictions(best_records, run_dir / "predictions.jsonl")
     metrics = evaluate(
         run_dir / "predictions.jsonl", data_root / "val", run_dir / "metrics.json",

@@ -1,5 +1,6 @@
 import math
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import torch
@@ -156,6 +157,7 @@ def train(
     grad_accum_steps: int,
     max_grad_norm: float,
     log_every: int,
+    on_log: Callable[[dict], None] | None = None,
 ) -> tuple[int, dict[str, dict], list[dict]]:
     """
     fine-tune model on train_loader , score val_loader after every epoch , keep the best epoch.
@@ -169,10 +171,13 @@ def train(
     weights are not saved : after train the model holds the LAST epoch's weights ,
     the best epoch's val predictions are returned instead.
 
+    on_log        : called with every history line the moment it is created (e.g. to print it and append it
+                    to history.jsonl) , so progress is visible during training and kept if the run is stopped
+
     returns (selected_epoch , records of the selected epoch on val , history) ; epochs are numbered from 1.
     history = list of dicts , in order :
-      {"type": "step" , "step" , "epoch" , "train_loss" (mean since the last step line) , "lr" , "grad_norm"}
-        every log_every optimizer steps
+      {"type": "step" , "step" , "epoch" , "train_loss" (mean since the last step line) , "lr" , "grad_norm" ,
+       "seconds" (since the start of the epoch)}  every log_every optimizer steps
       {"type": "epoch" , "epoch" , "train_loss" (mean over the epoch) , "macro_f1_6" , "macro_f1_7" ,
        "per_class_f1" , "is_best" , "seconds"}  after every epoch
     """
@@ -222,14 +227,18 @@ def train(
                 step = step + 1
 
                 if step % log_every == 0:
-                    history.append({
+                    line = {
                         "type": "step",
                         "step": step,
                         "epoch": epoch,
                         "train_loss": log_loss_sum / log_batches,
                         "lr": lr,
                         "grad_norm": grad_norm.item(),
-                    })
+                        "seconds": time.perf_counter() - start_time,
+                    }
+                    history.append(line)
+                    if on_log is not None:
+                        on_log(line)
                     log_loss_sum = 0.0
                     log_batches = 0
 
@@ -248,7 +257,7 @@ def train(
         for label in LABELS:
             per_class_f1[label] = metrics["per_class"][label]["f1"]
 
-        history.append({
+        line = {
             "type": "epoch",
             "epoch": epoch,
             "train_loss": epoch_loss_sum / num_batches,
@@ -257,6 +266,9 @@ def train(
             "per_class_f1": per_class_f1,
             "is_best": is_best,
             "seconds": time.perf_counter() - start_time,
-        })
+        }
+        history.append(line)
+        if on_log is not None:
+            on_log(line)
 
     return selected_epoch, best_records, history
