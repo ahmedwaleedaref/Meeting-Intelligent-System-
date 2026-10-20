@@ -20,6 +20,9 @@ class LengthBucketBatchSampler(Sampler[list[int]]):
     eval (shuffle=False) : all indices sorted by length , longest first (an out-of-memory error shows up
                            in the first batch) , same order every time.
     the last batch may be smaller than batch_size ; it is kept , so every item is used.
+    in train mode that short batch is always yielded last : Accelerate (split_batches , 2 GPUs) only splits full
+    batches plus a short LAST one , a short batch anywhere else would be silently dropped.
+    batch_size and drop_last are stored as attributes because Accelerate reads them.
     """
 
     def __init__(
@@ -42,6 +45,9 @@ class LengthBucketBatchSampler(Sampler[list[int]]):
         """
         if batch_size < 1 or chunk_batches < 1:
             raise ValueError(f"batch_size and chunk_batches must be >= 1, got {batch_size} and {chunk_batches}")
+
+        self.batch_size = batch_size
+        self.drop_last = False
 
         generator = torch.Generator()
         generator.manual_seed(seed)
@@ -74,6 +80,13 @@ class LengthBucketBatchSampler(Sampler[list[int]]):
             for b in batch_order:
                 shuffled_batches.append(batches[b])
             batches = shuffled_batches
+
+            # move the one short batch (if any) to the end
+            for b in range(len(batches)):
+                if len(batches[b]) < batch_size:
+                    short_batch = batches.pop(b)
+                    batches.append(short_batch)
+                    break
         else:
             # eval : all indices sorted by length, longest first -> batches
             indices = sorted(range(len(dataset)), key=lambda i: lengths[i], reverse=True)

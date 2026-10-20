@@ -30,19 +30,30 @@ class SegmentDataset(Dataset):
     no tokenizer and no rendering : items are plain text , so encoder , decoder and prompting share it.
     """
 
-    def __init__(self, split_dir: str | Path, past_k: int, future_k: int, allow_test: bool = False) -> None:
+    def __init__(
+        self,
+        split_dir: str | Path,
+        past_k: int,
+        future_k: int,
+        allow_test: bool = False,
+        keep_labels: tuple[str, ...] | None = None,
+    ) -> None:
         """
         split_dir  : a split folder (e.g. data/v4_meetings/val) ; every *.jsonl in it is one meeting
         past_k     : number of segments before the target (0 = none)
         future_k   : number of segments after the target (0 = none)
         allow_test : the test split is read only when True , and its items then have label None (PROTOCOL §7)
+        keep_labels: if given , only segments whose gold label is in it become items (e.g. stage 2 of the
+                     hierarchical model trains on non-"other" segments only) ; their context windows still
+                     come from every segment of the meeting. None (default) = every segment.
 
         meetings are read in file-name order and segments in position order,
         so index i is the same segment on every machine.
         raises ValueError on : the test split without allow_test=True ,
                                a folder with no *.jsonl files ,
                                negative past_k / future_k ,
-                               a label not in LABELS
+                               a label not in LABELS ,
+                               keep_labels on the test split (its labels are hidden)
         """
         if past_k < 0 or future_k < 0:
             raise ValueError(f"past_k and future_k must be >= 0, got {past_k} and {future_k}")
@@ -52,6 +63,8 @@ class SegmentDataset(Dataset):
         is_test = split_dir.resolve().name == "test"
         if is_test and not allow_test:
             raise ValueError(f"{split_dir}: test split is read only with allow_test=True (PROTOCOL §7)")
+        if is_test and keep_labels is not None:
+            raise ValueError(f"{split_dir}: keep_labels needs gold labels , the test split has none")
 
         files = sorted(split_dir.glob("*.jsonl"))
         if len(files) == 0:
@@ -67,6 +80,8 @@ class SegmentDataset(Dataset):
 
             for i in range(len(rows)):
                 row = rows[i]
+                if keep_labels is not None and row["label"] not in keep_labels:
+                    continue
 
                 # previous segments, closest first, stop at the start of the meeting
                 left = []

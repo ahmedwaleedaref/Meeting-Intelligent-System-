@@ -23,6 +23,7 @@ def build_dataloader(
     suffix: str = "",
     seed: int = 0,
     allow_test: bool = False,
+    keep_labels: tuple[str, ...] | None = None,
 ) -> DataLoader:
     """
     the input pipeline of one split : SegmentDataset -> LengthBucketBatchSampler -> SegmentCollator -> DataLoader.
@@ -33,7 +34,7 @@ def build_dataloader(
     pin_memory      : on when a GPU is available (faster copies to the GPU).
     the collator is reachable as dataloader.collate_fn , e.g. to read n_truncated after an epoch.
     """
-    dataset = SegmentDataset(split_dir, past_k, future_k, allow_test=allow_test)
+    dataset = SegmentDataset(split_dir, past_k, future_k, allow_test=allow_test, keep_labels=keep_labels)
     sampler = LengthBucketBatchSampler(dataset, batch_size, chunk_batches, shuffle, seed=seed)
     collator = SegmentCollator(tokenizer, max_length, separator, markers=markers, suffix=suffix)
 
