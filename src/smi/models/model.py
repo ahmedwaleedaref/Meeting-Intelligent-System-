@@ -4,7 +4,6 @@ from collections.abc import Callable
 from pathlib import Path
 
 import torch
-from accelerate import Accelerator
 from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import DataLoader
 from transformers import (
@@ -33,7 +32,7 @@ def load_model_and_tokenizer(
     model and tokenizer come from the same name_or_path , so they can never mismatch.
     the classification head is new and randomly initialised (HF warns about it : expected).
     weights are loaded in fp32 : transformers 5 defaults to dtype="auto" (the checkpoint's own dtype ,
-    fp16 for some checkpoints) ; mixed precision is applied by Accelerate in the training loop , not here.
+    fp16 for some checkpoints).
     encoder only for now : a decoder also needs a pad token set on both tokenizer and model (open , Part 5).
     """
     id2label = {}
@@ -57,14 +56,12 @@ def predict(
     model: PreTrainedModel,
     dataloader: DataLoader,
     labels: tuple[str, ...] = LABELS,
-    fp16: bool = False,
 ) -> dict[str, dict]:
     """
     run the model over every batch of dataloader and return one record per segment , in the harness shape :
     {seg_id: {"label": the class with the highest score , "scores": {label: probability} for every label}}
     (with the 7 LABELS : the same shape load_predictions returns , so per_class_metrics can use it directly).
     labels : the model's classes , in head order (as given to load_model_and_tokenizer)
-    fp16   : run the forward pass under fp16 autocast (only on a GPU ; faster on T4 Tensor Cores)
 
     model.eval() is set here (dropout off) ; switching back to train mode is the training loop's job.
     batches are moved to the model's device ; seg_ids stay a python list.
@@ -73,15 +70,13 @@ def predict(
     """
     model.eval()
     device = next(model.parameters()).device
-    use_fp16 = fp16 and device.type == "cuda"
 
     records = {}
     with torch.no_grad():
         for batch in dataloader:
             input_ids = batch["input_ids"].to(device)
             attention_mask = batch["attention_mask"].to(device)
-            with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=use_fp16):
-                logits = model(input_ids=input_ids, attention_mask=attention_mask).logits
+            logits = model(input_ids=input_ids, attention_mask=attention_mask).logits
             probabilities = logits.float().softmax(dim=-1).cpu().tolist()
 
             for i in range(len(batch["seg_ids"])):
@@ -194,17 +189,12 @@ def build_optimizer(model: PreTrainedModel, lr: float, weight_decay: float) -> t
     the split is by shape , not by name , so it works for every architecture (encoder and decoder norms are named differently).
     betas and eps are PyTorch's defaults.
     frozen parameters (requires_grad False , e.g. the base model under LoRA later) are left out.
-    fused : when every parameter is on a GPU , the update of all parameters runs as one fused GPU kernel
-            (same math , fewer kernel launches) ; so move the model to its device BEFORE building the optimizer.
     """
     decay = []
     no_decay = []
-    all_on_gpu = True
     for name, parameter in model.named_parameters():
         if not parameter.requires_grad:
             continue
-        if parameter.device.type != "cuda":
-            all_on_gpu = False
         if parameter.ndim < 2:
             no_decay.append(parameter)
         else:
@@ -214,7 +204,7 @@ def build_optimizer(model: PreTrainedModel, lr: float, weight_decay: float) -> t
         {"params": decay, "weight_decay": weight_decay},
         {"params": no_decay, "weight_decay": 0.0},
     ]
-    return torch.optim.AdamW(groups, lr=lr, fused=all_on_gpu)
+    return torch.optim.AdamW(groups, lr=lr)
 
 
 def build_scheduler(
@@ -234,7 +224,6 @@ def build_scheduler(
 
     the training loop must call scheduler.step() after every optimizer step ,
     and also step the optimizer on the last , incomplete accumulation group of an epoch (that is what ceil counts).
-    with Accelerate , pass the train_loader returned by accelerator.prepare.
     raises ValueError on epochs or grad_accum_steps < 1 , or warmup_ratio outside [0, 1)
     """
     if epochs < 1 or grad_accum_steps < 1:
@@ -254,7 +243,6 @@ def build_scheduler(
 
 
 def train(
-    accelerator: Accelerator,
     model: PreTrainedModel,
     train_loader: DataLoader,
     val_loader: DataLoader,
@@ -272,10 +260,7 @@ def train(
 ) -> tuple[int, dict[str, dict], list[dict]]:
     """
     fine-tune model on train_loader , score val_loader after every epoch , keep the best epoch.
-    accelerator   : model , optimizer , train_loader and scheduler must already be passed through
-                    accelerator.prepare ; val_loader must NOT be (validation runs on the main process only).
-                    mixed precision (fp16) and the number of GPUs come from the accelerator ; with 2 GPUs and
-                    split_batches every batch is cut in two halves , so one step still sees the same batch.
+    model is moved to the GPU if there is one , else it stays on the CPU (fp32 , one device).
     labels        : the model's classes , in head order
     select_labels : best epoch = highest mean val F1 over these (default : the 6 target classes = macro_f1_6)
     label_map     : turns the dataset's 7-class label index into the model's class index
@@ -284,23 +269,22 @@ def train(
     loss          : plain cross-entropy (no class weights ; handling minority classes is a later task)
     accumulation  : gradients of grad_accum_steps batches are summed before one optimizer step ;
                     the last , incomplete group of an epoch also gets a step (as build_scheduler counts)
-    clipping      : the gradient norm is clipped to max_grad_norm before every optimizer step (after fp16 unscaling)
+    clipping      : the gradient norm is clipped to max_grad_norm before every optimizer step
     selection     : a tie keeps the earlier epoch
-    on_log        : called on the main process with every history line the moment it is created
-    the train loss is kept on the GPU and read (one GPU -> CPU sync) only when a line is logged.
+    on_log        : called with every history line the moment it is created (e.g. to print it and append it
+                    to history.jsonl) , so progress is visible during training and kept if the run is stopped
     weights are not saved : after train the model holds the LAST epoch's weights ,
     the best epoch's val predictions are returned instead.
 
-    returns , on the main process , (selected_epoch , records of the selected epoch on val , history) ;
-    on the other processes (0 , {} , []). epochs are numbered from 1.
+    returns (selected_epoch , records of the selected epoch on val , history) ; epochs are numbered from 1.
     history = list of dicts , in order :
-      {"type": "step" , "step" , "epoch" , "train_loss" (mean since the last step line , over all GPUs) , "lr" ,
-       "grad_norm" , "seconds" (since the start of the epoch)}  every log_every optimizer steps
+      {"type": "step" , "step" , "epoch" , "train_loss" (mean since the last step line) , "lr" , "grad_norm" ,
+       "seconds" (since the start of the epoch)}  every log_every optimizer steps
       {"type": "epoch" , "epoch" , "train_loss" (mean over the epoch) , "val_macro_f1" (over select_labels) ,
-       "per_class_f1" , "is_best" , "skipped_steps" (fp16 overflow) , "seconds"}  after every epoch
+       "per_class_f1" , "is_best" , "seconds"}  after every epoch
     """
-    device = accelerator.device
-    use_fp16 = accelerator.mixed_precision == "fp16"
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
     loss_function = torch.nn.CrossEntropyLoss()
     label_map_tensor = None
     if label_map is not None:
@@ -317,11 +301,9 @@ def train(
         start_time = time.perf_counter()
         model.train()
         optimizer.zero_grad()
-        # sums stay on the GPU : no GPU -> CPU sync on every batch
-        epoch_loss_sum = torch.zeros((), device=device)
-        log_loss_sum = torch.zeros((), device=device)
+        epoch_loss_sum = 0.0
+        log_loss_sum = 0.0
         log_batches = 0
-        skipped_steps = 0
 
         for batch_index, batch in enumerate(train_loader):
             input_ids = batch["input_ids"].to(device)
@@ -330,82 +312,64 @@ def train(
             if label_map_tensor is not None:
                 batch_labels = label_map_tensor[batch_labels]
 
-            # the prepared model runs its forward under fp16 autocast when mixed precision is on
             logits = model(input_ids=input_ids, attention_mask=attention_mask).logits
-            loss = loss_function(logits.float(), batch_labels)
+            loss = loss_function(logits, batch_labels)
 
             # divide by the size of this accumulation group , so a step sees the mean loss of its batches
             group_start = (batch_index // grad_accum_steps) * grad_accum_steps
             group_size = min(grad_accum_steps, num_batches - group_start)
-            is_group_end = (batch_index + 1) % grad_accum_steps == 0 or batch_index == num_batches - 1
-            if is_group_end:
-                accelerator.backward(loss / group_size)
-            else:
-                # inside an accumulation group : no gradient exchange between GPUs yet
-                with accelerator.no_sync(model):
-                    accelerator.backward(loss / group_size)
+            (loss / group_size).backward()
 
-            epoch_loss_sum = epoch_loss_sum + loss.detach()
-            log_loss_sum = log_loss_sum + loss.detach()
+            epoch_loss_sum = epoch_loss_sum + loss.item()
+            log_loss_sum = log_loss_sum + loss.item()
             log_batches = log_batches + 1
 
+            is_group_end = (batch_index + 1) % grad_accum_steps == 0 or batch_index == num_batches - 1
             if is_group_end:
-                grad_norm = accelerator.clip_grad_norm_(model.parameters(), max_grad_norm)
+                grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
                 lr = scheduler.get_last_lr()[0]  # the lr this step uses
                 optimizer.step()
-                scheduler.step()  # the prepared scheduler does not step when fp16 skipped the optimizer step
+                scheduler.step()
                 optimizer.zero_grad()
                 step = step + 1
-                if optimizer.step_was_skipped:
-                    skipped_steps = skipped_steps + 1
 
                 if step % log_every == 0:
-                    # mean over the GPUs (every process runs this line : it is a collective operation)
-                    mean_loss = accelerator.reduce(log_loss_sum, reduction="mean").item() / log_batches
-                    if accelerator.is_main_process:
-                        line = {
-                            "type": "step",
-                            "step": step,
-                            "epoch": epoch,
-                            "train_loss": mean_loss,
-                            "lr": lr,
-                            "grad_norm": grad_norm.item(),
-                            "seconds": time.perf_counter() - start_time,
-                        }
-                        history.append(line)
-                        if on_log is not None:
-                            on_log(line)
-                    log_loss_sum = torch.zeros((), device=device)
+                    line = {
+                        "type": "step",
+                        "step": step,
+                        "epoch": epoch,
+                        "train_loss": log_loss_sum / log_batches,
+                        "lr": lr,
+                        "grad_norm": grad_norm.item(),
+                        "seconds": time.perf_counter() - start_time,
+                    }
+                    history.append(line)
+                    if on_log is not None:
+                        on_log(line)
+                    log_loss_sum = 0.0
                     log_batches = 0
 
-        epoch_loss = accelerator.reduce(epoch_loss_sum, reduction="mean").item() / num_batches
+        records = predict(model, val_loader, labels=labels)
+        val_macro_f1, per_class_f1 = macro_f1_over(records, val_gold, select_labels)
 
-        # validation on the main process only ; the other GPU waits at the barrier
-        accelerator.wait_for_everyone()
-        if accelerator.is_main_process:
-            records = predict(accelerator.unwrap_model(model), val_loader, labels=labels, fp16=use_fp16)
-            val_macro_f1, per_class_f1 = macro_f1_over(records, val_gold, select_labels)
+        # strictly greater : a tie keeps the earlier epoch
+        is_best = val_macro_f1 > best_f1
+        if is_best:
+            best_f1 = val_macro_f1
+            selected_epoch = epoch
+            best_records = records
 
-            # strictly greater : a tie keeps the earlier epoch
-            is_best = val_macro_f1 > best_f1
-            if is_best:
-                best_f1 = val_macro_f1
-                selected_epoch = epoch
-                best_records = records
-
-            line = {
-                "type": "epoch",
-                "epoch": epoch,
-                "train_loss": epoch_loss,
-                "val_macro_f1": val_macro_f1,
-                "per_class_f1": per_class_f1,
-                "is_best": is_best,
-                "skipped_steps": skipped_steps,
-                "seconds": time.perf_counter() - start_time,
-            }
-            history.append(line)
-            if on_log is not None:
-                on_log(line)
-        accelerator.wait_for_everyone()
+        line = {
+            "type": "epoch",
+            "epoch": epoch,
+            "train_loss": epoch_loss_sum / num_batches,
+            "val_macro_f1": val_macro_f1,
+            "per_class_f1": per_class_f1,
+            "is_best": is_best,
+            "seconds": time.perf_counter() - start_time,
+        }
+        history.append(line)
+        if on_log is not None:
+            on_log(line)
 
     return selected_epoch, best_records, history
