@@ -8,8 +8,10 @@ How a training step spends its time on a GPU, and what each optimization in `src
 | [02 Performance regimes](02-performance-regimes.md) | Is a step limited by compute, memory bandwidth or overhead, and how to tell |
 | [03 The training loop before and after](03-training-loop-before-after.md) | What each of the five optimizations changed in the code |
 | [04 Data-parallel training on two GPUs](04-data-parallel-two-gpus.md) | What the two GPUs actually do in every step, and what it costs |
+| [05 Measured on the T4, one change at a time](05-measured-on-t4.md) | The results: fp32 → fp16 → fused AdamW, per phase, and which hypotheses they corrected |
+| [06 How to measure a training step](06-how-to-measure.md) | The method: one change at a time, predictions first, syncs, warm-up, side effects |
 
-Still to be written once covered: fused optimizers in detail, mixed precision (fp16 format, loss scaling), profiling.
+Still to be written once covered: mixed precision in depth (fp16 format, loss scaling), profiling with `torch.profiler`.
 
 **Reading order for the sources:**
 1. Horace He, *Making Deep Learning Go Brrrr From First Principles*: https://horace.io/brrr_intro.html

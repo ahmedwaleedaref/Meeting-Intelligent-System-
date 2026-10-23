@@ -28,6 +28,12 @@ Increase the work and watch the time:
 - **fp16 makes the compute ~2–3× faster, which exposes the fixed overhead:** batch 8 → 16 costs nothing extra (78 → 75 ms). That is the **overhead floor**, ~75 ms per forward + backward.
 - **Lesson:** an optimization that shrinks compute only helps until you hit the overhead floor. Below it, a smaller batch per GPU does not get faster.
 
+## Measured on the T4
+The same test on the real target GPU, with the full training step, is in [05](05-measured-on-t4.md).
+- **fp32 is compute-bound:** forward 2.15×, backward 1.85× for 2.40× the tokens.
+- **In fp16 the forward reaches its overhead floor:** 36.8 → 40.6 ms for 2.40× the tokens.
+- **The optimizer and clip are fixed costs:** constant across batch sizes, because the gradient has one value per weight whatever the batch.
+
 ## Time per epoch
 `time per epoch = (segments / batch size) × time per step`. Whenever the step grows **less** than the batch, larger batches make epochs shorter. With fp16 above, batch 16 → 64 is 4× the work for 2.4× the time, so ~40% less time per epoch. A larger batch also changes training (fewer, larger updates; the LR may need re-tuning), so it must be validated like any hyperparameter.
 

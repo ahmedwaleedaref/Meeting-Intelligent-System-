@@ -3,7 +3,9 @@
 **Before:** commit `bc45255` (the first Kaggle run: fp32, one T4, ~0.27 s per step).
 **After:** commit `6e1d913` (fp16, two T4s, same time per step).
 
-All five changes were made together and measured only together, so the run cannot say which helped. See [02](02-performance-regimes.md) for what local measurements suggest.
+All five changes were first made together and measured only together, so that run could not say which helped. They were then reverted and re-applied **one at a time** on one T4: see [05](05-measured-on-t4.md) for the measured effect of each.
+- fp16: 245.8 → 165.7 ms per step.
+- Fused AdamW: optimizer 63.5 → 24.0 ms.
 
 ## What did NOT change
 The algorithm. For one batch:
@@ -18,12 +20,12 @@ After every epoch: predict on val, then select the best epoch. The same seed rep
 
 ## The five changes, line by line
 
-### 1. Fused AdamW (`build_optimizer`)
+### 1. Fused AdamW (`build_optimizer`). Measured: optimizer 63.5 → 24.0 ms ([05](05-measured-on-t4.md))
 ```python
 # before                                          # after
 torch.optim.AdamW(groups, lr=lr)                  torch.optim.AdamW(groups, lr=lr, fused=all_on_gpu)
 ```
-The default implementation ("foreach") updates the parameters in groups of tensors, several kernels per group. Fused does the whole update (m, v and w) for all parameters in a **few large kernels**. That's far fewer launches, and each number is read and written once instead of once per sub-operation. The update itself is memory-bound, since it touches w, g, m and v for 184M parameters every step. It requires the parameters to be on the GPU when the optimizer is built, so the script now calls `model.to(device)` first.
+The default implementation ("foreach") runs each line of the AdamW update as a separate pass over all parameters: ~22 passes over 184M numbers (~16 GB of VRAM traffic) once the temporary denominator tensor is counted. Fused does the whole update (m, v and w) for all parameters in a **few large kernels**. That's far fewer launches, and each number is read and written once instead of once per sub-operation. The update itself is memory-bound, since it touches w, g, m and v for 184M parameters every step. It requires the parameters to be on the GPU when the optimizer is built, so the script now calls `model.to(device)` first.
 
 ### 2. No `.item()` on every batch (`train`)
 ```python
@@ -39,7 +41,7 @@ val_loader = build_dataloader(..., batch_size=SETTINGS["eval_batch_size"], ...) 
 ```
 Validation has no backward pass and no optimizer, so it has the memory to spare. 4× more segments per kernel means 4× fewer forward passes for the same 16,188 segments. This is the one change with a visible effect: an epoch including validation went from 11.9 to 11.2 min.
 
-### 4. fp16 mixed precision (Accelerate)
+### 4. fp16 mixed precision (Accelerate). Measured: forward + backward 190.9 → 86.7 ms ([05](05-measured-on-t4.md))
 ```python
 # before                                          # after
 loss.backward()                                   accelerator.backward(loss)        # loss scaling inside
@@ -47,7 +49,7 @@ torch.nn.utils.clip_grad_norm_(...)               accelerator.clip_grad_norm_(..
 logits = model(...).logits                        logits = model(...).logits        # the prepared model runs under fp16 autocast
 loss = loss_function(logits, labels)              loss = loss_function(logits.float(), labels)
 ```
-The matrix multiplications run in fp16 on Tensor Cores. The weights stay fp32 ("master weights"). The loss is multiplied by a scale factor before the backward pass, so small fp16 gradients don't round to zero, and the gradients are divided by it again before clipping and the update. If a gradient overflowed, the step is **skipped** and the scale is lowered (`skipped_steps` in the history: 0 in every run). Checking for overflow needs one synchronisation per step.
+The matrix multiplications run in fp16 on Tensor Cores. The weights stay fp32 ("master weights"). The loss is multiplied by a scale factor before the backward pass, so small fp16 gradients don't round to zero, and the gradients are divided by it again before clipping and the update. If a gradient overflowed, the step is **skipped** and the scale is lowered (`skipped_steps` in the history: 0 in every run). With the default AdamW, checking for overflow is one synchronisation per step; with fused AdamW the check happens inside the fused kernel, without a sync.
 
 ### 5. Two GPUs (Accelerate, `split_batches=True`)
 ```python
