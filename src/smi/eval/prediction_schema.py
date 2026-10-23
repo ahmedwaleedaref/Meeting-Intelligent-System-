@@ -1,3 +1,5 @@
+import json
+
 from smi.jsonl import iter_jsonl
 from smi.labels import LABELS
 
@@ -82,3 +84,32 @@ def load_predictions(path) -> dict[str , dict] :
             records[seg_id] = temp_dict
 
         return records
+
+
+def write_predictions(records: dict[str, dict], path) -> None:
+    """
+    the inverse of load_predictions : write records ({seg_id: {"label": ..., "scores": ...}} , e.g. from predict)
+    as a B1 prediction file , one JSON object per line : {"seg_id": ..., "label": ..., "scores": ...}
+
+    every record is checked with validate_one_parsed_json before anything is written ,
+    so a broken file is never created (same rules as load_predictions , incl. all-scores or all-null).
+    lines are sorted by seg_id , so the same predictions always give the same file.
+    raises PredictionFileError on an invalid record or a mixed file ;
+    raises FileExistsError if path already exists : a run's files are never overwritten (PROTOCOL §4.3)
+    """
+    lines = []
+    has_scores = None
+    for seg_id in sorted(records):
+        record = {"seg_id": seg_id, "label": records[seg_id]["label"], "scores": records[seg_id]["scores"]}
+        validate_one_parsed_json(record)
+        record_has_scores = record["scores"] is not None
+        if has_scores is None:
+            has_scores = record_has_scores
+        elif record_has_scores != has_scores:
+            raise PredictionFileError(f"seg_id {seg_id!r}: mixed records, some have scores and some are null")
+        lines.append(json.dumps(record))
+
+    # "x" = create a new file , fail if it already exists
+    with open(path, "x", encoding="utf-8") as prediction_file:
+        for line in lines:
+            prediction_file.write(line + "\n")
