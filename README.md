@@ -31,7 +31,6 @@ flowchart LR
 | ID | Task | Owner | Status |
 |----|------|-------|--------|
 | [B](tasks/B-eval-harness/README.md) | Evaluation harness | Ahmed | in progress |
-| [C0](tasks/C0-infrastructure/README.md) | Shared baseline infrastructure (interface, config, run.py, checkpoints) | TBD | not started |
 | [C1](tasks/C1-encoder-baseline/README.md) | Encoder baseline (DeBERTa) and hierarchical variant | Ahmed | in progress |
 | [C2](tasks/C2-decoder-baseline/README.md) | Decoder + classification head baseline (Qwen, LoRA) | TBD | not started |
 | [C3](tasks/C3-prompting-baseline/README.md) | Prompting baseline | TBD | not started |
