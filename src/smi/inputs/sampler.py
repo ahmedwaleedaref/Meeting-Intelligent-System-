@@ -65,6 +65,7 @@ class LengthBucketBatchSampler(Sampler[list[int]]):
             chunk_size = chunk_batches * batch_size
             for start in range(0, len(indices), chunk_size):
                 chunk = indices[start:start + chunk_size]
+                # sort the chunk's example indices by each example's length (lengths[i]) , shortest first
                 chunk = sorted(chunk, key=lambda i: lengths[i])
                 for batch_start in range(0, len(chunk), batch_size):
                     batches.append(chunk[batch_start:batch_start + batch_size])
@@ -76,6 +77,7 @@ class LengthBucketBatchSampler(Sampler[list[int]]):
             batches = shuffled_batches
         else:
             # eval : all indices sorted by length, longest first -> batches
+            # sort all example indices by each example's length (lengths[i]) , longest first
             indices = sorted(range(len(dataset)), key=lambda i: lengths[i], reverse=True)
             for batch_start in range(0, len(indices), batch_size):
                 batches.append(indices[batch_start:batch_start + batch_size])
