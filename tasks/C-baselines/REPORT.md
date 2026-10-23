@@ -94,7 +94,7 @@ flowchart LR
 | `src/smi/eval/prediction_schema.py` | `write_predictions` (new), the inverse of the existing `load_predictions` |
 | `src/smi/eval/evaluate.py` | `compute_metrics` (in memory) and `evaluate` (file → `metrics.json`) |
 | `scripts/trial_run.py` | Temporary driver: `--mode flat\|hierarchical`, `--seeds` |
-| `scripts/kaggle_flat.ipynb`, `scripts/kaggle_hierarchical.ipynb` | Kaggle notebooks running the trial script on 2 × T4 |
+| `notebooks/kaggle_flat.ipynb`, `notebooks/kaggle_hierarchical.ipynb` | Kaggle notebooks running the trial script on 2 × T4 |
 
 **Separation of concerns.** The Dataset has no tokenizer and returns plain text. That makes it shareable by the encoder, the decoder and prompting. Everything model-specific (the tokenizer, special tokens, padding) lives in the Collator, which the model family builds.
 
@@ -409,7 +409,7 @@ PYTHONPATH=src python scripts/trial_run.py --mode flat --seeds 42 \
     --data-root data/v4_meetings --model microsoft/deberta-v3-base --out-dir runs
 ```
 
-Two GPUs (Kaggle notebooks `scripts/kaggle_flat.ipynb`, `scripts/kaggle_hierarchical.ipynb`):
+Two GPUs (Kaggle notebooks `notebooks/kaggle_flat.ipynb`, `notebooks/kaggle_hierarchical.ipynb`):
 
 ```bash
 PYTHONPATH=src accelerate launch --num_processes 2 --num_machines 1 --mixed_precision fp16 --dynamo_backend no \

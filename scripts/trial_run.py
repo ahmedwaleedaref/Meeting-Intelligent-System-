@@ -8,7 +8,8 @@ TEMPORARY trial of the encoder pipeline (not the PROTOCOL run.py : its numbers a
 for each seed : train -> write the best epoch's val predictions -> evaluate (7 classes , the harness) ->
 one folder per seed with settings.json , history.jsonl (per stage) , predictions.jsonl , metrics.json.
 
-one process , one device (the GPU if there is one) , fp32 : the pre-optimization setup.
+one process , one device (the GPU if there is one). fp16 and fused AdamW are settings below
+(measured one at a time on a T4 in concepts/performance-analysis-and-optimization/05).
 
 usage (from the repo root) :
     PYTHONPATH=src python scripts/trial_run.py --mode flat --data-root data/v4_meetings --model microsoft/deberta-v3-base --out-dir runs
@@ -47,6 +48,8 @@ SETTINGS = {
     "grad_accum_steps": 1,
     "max_grad_norm": 1.0,
     "log_every": 50,
+    "fp16": True,             # mixed precision (GPU only) ; False = fp32 , the pre-optimization setup
+    "fused_optimizer": True,  # fused AdamW ; False = PyTorch's default implementation
 }
 
 
@@ -65,6 +68,8 @@ def run_stage(
     # one seed for everything random : head initialisation , dropout and the train batches
     set_seed(seed)
     model, tokenizer = load_model_and_tokenizer(model_name, labels)
+    # on its device before the optimizer is built : fused AdamW needs the parameters on the GPU
+    model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
 
     loader_args = {
         "tokenizer": tokenizer,
@@ -82,14 +87,15 @@ def run_stage(
     val_loader = build_dataloader(data_root / "val", batch_size=SETTINGS["batch_size"], shuffle=False, **loader_args)
     collator = train_loader.collate_fn
 
-    optimizer = build_optimizer(model, SETTINGS["lr"], SETTINGS["weight_decay"])
+    optimizer = build_optimizer(model, SETTINGS["lr"], SETTINGS["weight_decay"], fused=SETTINGS["fused_optimizer"])
     scheduler = build_scheduler(
         optimizer, train_loader, SETTINGS["epochs"], SETTINGS["warmup_ratio"], SETTINGS["grad_accum_steps"]
     )
 
     total_steps = SETTINGS["epochs"] * math.ceil(len(train_loader) / SETTINGS["grad_accum_steps"])
     print(f"[{stage_dir.name}] seed {seed}: {len(train_loader)} train batches per epoch , "
-          f"{total_steps} optimizer steps", flush=True)
+          f"{total_steps} optimizer steps | fp16 {SETTINGS['fp16']} | fused AdamW {SETTINGS['fused_optimizer']}",
+          flush=True)
 
     # every history line is printed and appended to history.jsonl as soon as train creates it
     stage_dir.mkdir(parents=True)
@@ -100,7 +106,9 @@ def run_stage(
         history_file.flush()
         if line["type"] == "step":
             print(f"  step {line['step']}/{total_steps} (epoch {line['epoch']}) | loss {line['train_loss']:.4f} "
-                  f"| lr {line['lr']:.2e} | grad_norm {line['grad_norm']:.2f} | {line['seconds'] / 60:.1f} min", flush=True)
+                  f"| lr {line['lr']:.2e} | grad_norm {line['grad_norm']:.2f} | "
+                  + (f"loss scale {line['loss_scale']:.0f} | " if line["loss_scale"] is not None else "")
+                  + f"{line['seconds'] / 60:.1f} min", flush=True)
         else:
             per_class = " ".join(f"{label} {f1:.3f}" for label, f1 in line["per_class_f1"].items())
             print(f"EPOCH {line['epoch']} | train_loss {line['train_loss']:.4f} | val macro F1 {line['val_macro_f1']:.4f} "
@@ -111,7 +119,7 @@ def run_stage(
         selected_epoch, best_records, history = train(
             model, train_loader, val_loader, val_gold, optimizer, scheduler,
             SETTINGS["epochs"], SETTINGS["grad_accum_steps"], SETTINGS["max_grad_norm"], SETTINGS["log_every"],
-            labels=labels, select_labels=select_labels, label_map=label_map, on_log=on_log,
+            labels=labels, select_labels=select_labels, label_map=label_map, on_log=on_log, fp16=SETTINGS["fp16"],
         )
     finally:
         history_file.close()
@@ -190,11 +198,16 @@ def main() -> None:
     parser.add_argument("--name", default=None, help="prefix of the run folders (default: trial_<mode>_k0)")
     parser.add_argument("--epochs", type=int, default=None, help="override SETTINGS['epochs'] (smoke tests)")
     parser.add_argument("--lr", type=float, default=None, help="override SETTINGS['lr'] (smoke tests)")
+    parser.add_argument("--fp32", action="store_true",
+                        help="fp16 and fused AdamW off : the pre-optimization setup (e.g. to reproduce the first seed-42 run)")
     args = parser.parse_args()
     if args.epochs is not None:
         SETTINGS["epochs"] = args.epochs
     if args.lr is not None:
         SETTINGS["lr"] = args.lr
+    if args.fp32:
+        SETTINGS["fp16"] = False
+        SETTINGS["fused_optimizer"] = False
     name = args.name if args.name is not None else f"trial_{args.mode}_k0"
 
     data_root = Path(args.data_root)

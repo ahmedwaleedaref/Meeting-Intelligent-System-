@@ -56,12 +56,14 @@ def predict(
     model: PreTrainedModel,
     dataloader: DataLoader,
     labels: tuple[str, ...] = LABELS,
+    fp16: bool = False,
 ) -> dict[str, dict]:
     """
     run the model over every batch of dataloader and return one record per segment , in the harness shape :
     {seg_id: {"label": the class with the highest score , "scores": {label: probability} for every label}}
     (with the 7 LABELS : the same shape load_predictions returns , so per_class_metrics can use it directly).
     labels : the model's classes , in head order (as given to load_model_and_tokenizer)
+    fp16   : run the forward pass under fp16 autocast (GPU only) ; False (default) = fp32 , as before
 
     model.eval() is set here (dropout off) ; switching back to train mode is the training loop's job.
     batches are moved to the model's device ; seg_ids stay a python list.
@@ -76,7 +78,8 @@ def predict(
         for batch in dataloader:
             input_ids = batch["input_ids"].to(device)
             attention_mask = batch["attention_mask"].to(device)
-            logits = model(input_ids=input_ids, attention_mask=attention_mask).logits
+            with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=fp16):
+                logits = model(input_ids=input_ids, attention_mask=attention_mask).logits
             probabilities = logits.float().softmax(dim=-1).cpu().tolist()
 
             for i in range(len(batch["seg_ids"])):
@@ -181,7 +184,7 @@ def classification_report(
     }
 
 
-def build_optimizer(model: PreTrainedModel, lr: float, weight_decay: float) -> torch.optim.AdamW:
+def build_optimizer(model: PreTrainedModel, lr: float, weight_decay: float, fused: bool = False) -> torch.optim.AdamW:
     """
     AdamW over the model's trainable parameters , in two groups :
     - 2-D parameters (weight matrices , embeddings) : weight_decay
@@ -189,6 +192,10 @@ def build_optimizer(model: PreTrainedModel, lr: float, weight_decay: float) -> t
     the split is by shape , not by name , so it works for every architecture (encoder and decoder norms are named differently).
     betas and eps are PyTorch's defaults.
     frozen parameters (requires_grad False , e.g. the base model under LoRA later) are left out.
+    fused : False (default) = PyTorch's default implementation (one pass over all parameters per line of the update) ;
+            True = fused AdamW , the same update in a few large kernels (measured on a T4 : 63.5 -> 24.0 ms per step ,
+            concepts/performance-analysis-and-optimization/05). Needs the parameters on the GPU already ,
+            so move the model to its device BEFORE building the optimizer.
     """
     decay = []
     no_decay = []
@@ -204,7 +211,9 @@ def build_optimizer(model: PreTrainedModel, lr: float, weight_decay: float) -> t
         {"params": decay, "weight_decay": weight_decay},
         {"params": no_decay, "weight_decay": 0.0},
     ]
-    return torch.optim.AdamW(groups, lr=lr)
+    # fused=None (not False) when not fusing : None lets PyTorch pick its default ("foreach") implementation ,
+    # while an explicit False would also switch foreach off and fall back to the slow single-tensor loop
+    return torch.optim.AdamW(groups, lr=lr, fused=True if fused else None)
 
 
 def build_scheduler(
@@ -257,10 +266,15 @@ def train(
     select_labels: tuple[str, ...] = TARGET_LABELS,
     label_map: list[int] | None = None,
     on_log: Callable[[dict], None] | None = None,
+    fp16: bool = False,
 ) -> tuple[int, dict[str, dict], list[dict]]:
     """
     fine-tune model on train_loader , score val_loader after every epoch , keep the best epoch.
-    model is moved to the GPU if there is one , else it stays on the CPU (fp32 , one device).
+    model is moved to the GPU if there is one , else it stays on the CPU (one device).
+    fp16          : False (default) = fp32 , as before. True = mixed precision (GPU only) : the forward runs under
+                    fp16 autocast (matrix multiplications on Tensor Cores) , the weights stay fp32 , and the loss is
+                    scaled before backward so small fp16 gradients do not round to 0 (GradScaler ; a step whose
+                    gradients overflowed is skipped and the scale lowered). With fp16 False every scaler call is a no-op.
     labels        : the model's classes , in head order
     select_labels : best epoch = highest mean val F1 over these (default : the 6 target classes = macro_f1_6)
     label_map     : turns the dataset's 7-class label index into the model's class index
@@ -279,13 +293,16 @@ def train(
     returns (selected_epoch , records of the selected epoch on val , history) ; epochs are numbered from 1.
     history = list of dicts , in order :
       {"type": "step" , "step" , "epoch" , "train_loss" (mean since the last step line) , "lr" , "grad_norm" ,
-       "seconds" (since the start of the epoch)}  every log_every optimizer steps
+       "loss_scale" (fp16 only , else None) , "seconds" (since the start of the epoch)}  every log_every optimizer steps
       {"type": "epoch" , "epoch" , "train_loss" (mean over the epoch) , "val_macro_f1" (over select_labels) ,
        "per_class_f1" , "is_best" , "seconds"}  after every epoch
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if fp16 and device.type != "cuda":
+        raise ValueError("fp16 needs a GPU")
     model.to(device)
     loss_function = torch.nn.CrossEntropyLoss()
+    scaler = torch.amp.GradScaler("cuda", enabled=fp16)
     label_map_tensor = None
     if label_map is not None:
         label_map_tensor = torch.tensor(label_map, dtype=torch.long, device=device)
@@ -312,13 +329,14 @@ def train(
             if label_map_tensor is not None:
                 batch_labels = label_map_tensor[batch_labels]
 
-            logits = model(input_ids=input_ids, attention_mask=attention_mask).logits
-            loss = loss_function(logits, batch_labels)
+            with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=fp16):
+                logits = model(input_ids=input_ids, attention_mask=attention_mask).logits
+            loss = loss_function(logits.float(), batch_labels)  # .float() does nothing when logits are already fp32
 
             # divide by the size of this accumulation group , so a step sees the mean loss of its batches
             group_start = (batch_index // grad_accum_steps) * grad_accum_steps
             group_size = min(grad_accum_steps, num_batches - group_start)
-            (loss / group_size).backward()
+            scaler.scale(loss / group_size).backward()  # = (loss / group_size).backward() when fp16 is False
 
             epoch_loss_sum = epoch_loss_sum + loss.item()
             log_loss_sum = log_loss_sum + loss.item()
@@ -326,9 +344,11 @@ def train(
 
             is_group_end = (batch_index + 1) % grad_accum_steps == 0 or batch_index == num_batches - 1
             if is_group_end:
+                scaler.unscale_(optimizer)  # divide the gradients by the scale again before clipping (no-op in fp32)
                 grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
                 lr = scheduler.get_last_lr()[0]  # the lr this step uses
-                optimizer.step()
+                scaler.step(optimizer)  # = optimizer.step() in fp32 ; skips the step if a gradient overflowed
+                scaler.update()
                 scheduler.step()
                 optimizer.zero_grad()
                 step = step + 1
@@ -341,6 +361,8 @@ def train(
                         "train_loss": log_loss_sum / log_batches,
                         "lr": lr,
                         "grad_norm": grad_norm.item(),
+                        # read only when logging : get_scale() is a GPU -> CPU sync
+                        "loss_scale": scaler.get_scale() if fp16 else None,
                         "seconds": time.perf_counter() - start_time,
                     }
                     history.append(line)
@@ -349,7 +371,7 @@ def train(
                     log_loss_sum = 0.0
                     log_batches = 0
 
-        records = predict(model, val_loader, labels=labels)
+        records = predict(model, val_loader, labels=labels, fp16=fp16)
         val_macro_f1, per_class_f1 = macro_f1_over(records, val_gold, select_labels)
 
         # strictly greater : a tie keeps the earlier epoch

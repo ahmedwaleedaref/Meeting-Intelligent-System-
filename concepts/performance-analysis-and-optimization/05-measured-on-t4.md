@@ -52,5 +52,21 @@ Batch 128 does not fit in 15 GB in any of these setups (fp16: ~3.8 GB more per 3
 - **`GradScaler.step()` with fused AdamW: no sync.** The optimizer declares `_step_supports_amp_scaling`, so the scaler passes the overflow flag as a GPU tensor and the fused kernel skips the update itself.
 - **`scaler.get_scale()` is `scale.item()`, a sync.** The first fp16 measurements called it twice per step to count skipped steps, an artifact of the measurement code, so those fp16 numbers are slightly pessimistic. The counter now runs only in breakdown mode, which syncs anyway.
 
-## Next single change
-No `.item()` per batch, measured against the same setup in the same session. With fused AdamW it removes the last per-step sync, so the CPU can run ahead across steps.
+## No `.item()` per batch: no effect, and why
+
+Measured in one session against fp16 + fused: 117.4 vs 117.9 ms (batch 32), 171.7 vs 173.6 ms (batch 64). The difference is within noise. (A first breakdown table showed backward time "moving" into clip: the breakdown mode had no sync after the backward and relied on `.item()` for it. Fixed.)
+
+**The profiler explains it** (`torch.profiler`, 10 steps; GPU busy time = union of kernel / memset / copy intervals):
+
+| batch | real ms/step | GPU busy | GPU idle | utilisation |
+|---|---|---|---|---|
+| 32 | 119.8 | 116.0 | 3.9 | **96.8%** |
+| 64 | 189.6 | 178.8 | 10.8 | **94.3%** |
+
+- **The GPU is already busy ~95–97% of every step,** so there is no waiting left for a removed sync to recover.
+- **The forward on its own is CPU-bound,** with 24.5 ms of GPU work against ~34 ms of launching. But without per-phase syncs, the CPU launches the next forward while the GPU still runs the backward, clip and optimizer (~91 ms of GPU work). The overhead is **hidden by overlap**.
+- **On the RTX 3050 at batch 8** the same step showed only **67%** utilisation. The regime depends on the GPU, the batch size and the precision, not only on the model.
+- **Pitfall:** `record_function` labels create GPU-side annotation events that span their whole phase, gaps included. Counting them as work gave an impossible 146% utilisation. Count only real work (`not event.is_user_annotation`).
+
+## Conclusion
+fp32 / batch 32 / default AdamW → **fp16 / batch 64 / fused AdamW**: 10.1 → 3.6 min per epoch (~2.8×). On one T4 the step is now GPU-bound, so further speed would need **less GPU work** (e.g. kernel fusion with `torch.compile`), not fewer syncs. Batch 64 still needs a validation run to confirm accuracy before it is adopted.
