@@ -26,3 +26,4 @@ Next: the experiments in task.md, run through `scripts/trial_run.py`.
 
 | Exp | Question | Result | Conclusion |
 |-----|----------|--------|------------|
+| [exp01](experiments/exp01_baseline-3-seeds/NOTE.md) | Flat baseline, 3 seeds (fp16 + fused, batch 32, k = 0): val macro-F1 and its seed spread | running | — |
