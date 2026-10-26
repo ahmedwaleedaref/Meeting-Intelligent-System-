@@ -27,3 +27,4 @@ Next: the experiments in task.md, run through `scripts/trial_run.py`.
 | Exp | Question | Result | Conclusion |
 |-----|----------|--------|------------|
 | [exp01](experiments/exp01_baseline-3-seeds/NOTE.md) | Flat baseline, 3 seeds (fp16 + fused, batch 32, k = 0): val macro-F1 and its seed spread | 0.499 ± 0.004 (seeds 42/43/44: 0.4985 / 0.5032 / 0.4949); ~27 min per seed | the reference for C1; differences < ~0.01 are seed noise; two parallel runs don't slow each other |
+| [exp02](experiments/exp02_lr-epochs-grid/NOTE.md) | LR {1e-5, 2e-5, 3e-5, 5e-5} × epochs {3, 5, 8}, k = 0, seed 42: the best setting to fix for the context experiments | pending | pending |

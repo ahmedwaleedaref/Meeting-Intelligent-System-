@@ -196,8 +196,8 @@ def main() -> None:
     parser.add_argument("--out-dir", required=True, help="where the per-seed run folders are created")
     parser.add_argument("--seeds", type=int, nargs="+", default=[42, 43, 44])
     parser.add_argument("--name", default=None, help="prefix of the run folders (default: trial_<mode>_k0)")
-    parser.add_argument("--epochs", type=int, default=None, help="override SETTINGS['epochs'] (smoke tests)")
-    parser.add_argument("--lr", type=float, default=None, help="override SETTINGS['lr'] (smoke tests)")
+    parser.add_argument("--epochs", type=int, default=None, help="override SETTINGS['epochs']")
+    parser.add_argument("--lr", type=float, default=None, help="override SETTINGS['lr']")
     parser.add_argument("--fp32", action="store_true",
                         help="fp16 and fused AdamW off : the pre-optimization setup (e.g. to reproduce the first seed-42 run)")
     args = parser.parse_args()
