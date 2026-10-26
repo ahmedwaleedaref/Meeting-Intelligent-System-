@@ -14,11 +14,29 @@ What val macro-F1 (6 target classes) does the flat DeBERTa-v3-base classifier re
 - Run folders: `trial_flat_k0_seed42`, `trial_flat_k0_seed43`, `trial_flat_k0_seed44`.
 
 ## Result
-_To fill in after the run:_
-- per seed: selected epoch and val macro-F1 (6), and per-class F1;
-- mean and standard deviation over the 3 seeds;
-- time per epoch and per seed (and whether two parallel runs slowed each other down, from the step lines);
-- seed 42 vs the earlier fp32 trial (0.503): fp16 + fused should change speed, not accuracy.
+
+| seed | run mode | selected epoch | val macro-F1 (6) | macro-F1 (7) | min per epoch (incl. val) | min per 50 steps |
+|---|---|---|---|---|---|---|
+| 42 | parallel (GPU 0) | 5 | 0.4985 | 0.5600 | 5.3 | 0.101 |
+| 43 | parallel (GPU 1) | 3 | 0.5032 | 0.5641 | 5.3 | 0.102 |
+| 44 | alone (GPU 0) | 2 | 0.4949 | 0.5574 | 5.4 | 0.103 |
+| **mean ± std** | | | **0.4989 ± 0.0042** | **0.5605 ± 0.0034** | | |
+
+Val macro-F1 (6) per epoch:
+- seed 42: 0.411, 0.479, 0.472, 0.490, 0.499
+- seed 43: 0.357, 0.480, 0.503, 0.494, 0.499
+- seed 44: 0.438, 0.495, 0.484, 0.482, 0.488
+
+Per-class F1, mean (std) over the 3 seeds:
+
+| cs | co | aa | bk | ar | cc | other |
+|---|---|---|---|---|---|---|
+| 0.483 (0.017) | 0.383 (0.006) | 0.365 (0.049) | 0.606 (0.002) | 0.714 (0.010) | 0.442 (0.042) | 0.930 (0.002) |
 
 ## Conclusion
-_To fill in._
+- **The flat baseline is val macro-F1 (6) = 0.499 ± 0.004** over 3 seeds. This is the reference for every later C1 experiment. A change needs a difference clearly larger than ~0.01 (the seed-to-seed range is 0.495–0.503) to count as an effect.
+- **fp16 + fused AdamW didn't change the accuracy.** Seed 42: 0.4985 now vs 0.5031 in the fp32 trial, a difference the size of the seed-to-seed spread.
+- **Speed: ~5.3 min per epoch including validation, ~27 min per seed,** against ~60 min for the fp32 trial (~2.2×).
+- **Two runs in parallel don't slow each other down.** Seeds 42 and 43 in parallel took 0.101–0.102 min per 50 steps; seed 44 alone took 0.103. The shared CPU keeps up, so the second T4 doubles experiment throughput.
+- **The val score plateaus after epoch 2–3 at about 0.48–0.50,** and the best epoch varies by seed (5, 3, 2). One seed is not enough to judge the number of epochs or the LR (task item 5).
+- **Per class:** `aa` (accept) and `cc` (commitment) are the least stable across seeds (std 0.05 and 0.04); `bk`, `other` and `co` are very stable.
