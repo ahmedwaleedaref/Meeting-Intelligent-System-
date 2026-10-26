@@ -36,3 +36,6 @@ Implementation:
 
 | Exp | Question | Result | Conclusion |
 |-----|----------|--------|------------|
+| [exp01](experiments/exp01_zero-shot-k0/NOTE.md) | Zero-shot, k = 0, definitions on, Qwen2.5-0.5B-Instruct, v3 val: the reference point for the grid | macro-F1 0.019; letter mass 0.996; 73 % of segments answered A, 25 % F, 1.4 % `other` | the format is followed but the answers follow the letter, not the content (extreme letter bias); calibrate, and try larger models before the grid |
+| [exp02](experiments/exp02_calibration/NOTE.md) | Does contextual calibration (content-free inputs) fix exp01's letter bias? | macro-F1 0.012; `other` F1 0.023 → 0.367; predictions shift to `aa` | no: calibration removes a constant preference but the 0.5B scores hold almost no class information; next, model size |
+| [exp03](experiments/exp03_model-size/NOTE.md) | Is the letter bias a matter of model size? exp01's setting with Qwen2.5 1.5B, 3B, 7B (4-bit), raw and calibrated | pending | pending |
