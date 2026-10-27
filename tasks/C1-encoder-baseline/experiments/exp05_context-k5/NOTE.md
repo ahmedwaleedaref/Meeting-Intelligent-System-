@@ -22,8 +22,13 @@ Does more context help further? With 5 segments before and 5 after the target, h
 
 ## How it was run
 - **Notebook:** `notebooks/kaggle_exp05_context_k5.ipynb` (Kaggle, GPU T4 × 2, two runs at a time). Branch `C1/encoder-baseline`, commit: _fill in from the `git log` line of the "Code and packages" cell_.
-- **Memory check:** _peak allocated / reserved, from section 5_. Gradient checkpointing: _on / off_.
-- **Command per seed:** `CUDA_VISIBLE_DEVICES=<gpu> PYTHONPATH=src python scripts/trial_run.py --mode flat --seeds <seed> --lr 1e-5 --epochs 3 --past-k 5 --future-k 5 [--grad-checkpointing] --name exp05_k5 --data-root <DATA_ROOT> --model microsoft/deberta-v3-base --out-dir /kaggle/working/runs`
+- **First attempt, plain batch 32: out of memory.**
+  - Seeds 42 and 44 (GPU 0) crashed in epoch 1. At the crash: 13.4 GiB allocated + ~1.0 GiB reserved but unallocated, of the T4's 14.56 GiB. The estimate was ~14.7 GB (13.7 GiB).
+  - The ~1 GiB not usable is fragmentation from batches of changing length. A memory check that repeats one batch shape doesn't build it up.
+  - The interrupted runs were stopped and deleted.
+  - Memory check result: _what it printed_.
+- **Rerun with gradient checkpointing**, by the rule above. Memory check: _peak allocated / reserved, from section 5_.
+- **Command per seed:** `CUDA_VISIBLE_DEVICES=<gpu> PYTHONPATH=src python scripts/trial_run.py --mode flat --seeds <seed> --lr 1e-5 --epochs 3 --past-k 5 --future-k 5 --grad-checkpointing --name exp05_k5 --data-root <DATA_ROOT> --model microsoft/deberta-v3-base --out-dir /kaggle/working/runs`
 - **Run folders:** `exp05_k5_seed42`, `exp05_k5_seed43`, `exp05_k5_seed44`.
 
 ## Decision rule
