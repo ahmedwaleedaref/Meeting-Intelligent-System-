@@ -198,6 +198,8 @@ def main() -> None:
     parser.add_argument("--name", default=None, help="prefix of the run folders (default: trial_<mode>_k0)")
     parser.add_argument("--epochs", type=int, default=None, help="override SETTINGS['epochs']")
     parser.add_argument("--lr", type=float, default=None, help="override SETTINGS['lr']")
+    parser.add_argument("--past-k", type=int, default=None, help="override SETTINGS['past_k'] (context segments before)")
+    parser.add_argument("--future-k", type=int, default=None, help="override SETTINGS['future_k'] (context segments after)")
     parser.add_argument("--fp32", action="store_true",
                         help="fp16 and fused AdamW off : the pre-optimization setup (e.g. to reproduce the first seed-42 run)")
     args = parser.parse_args()
@@ -205,6 +207,10 @@ def main() -> None:
         SETTINGS["epochs"] = args.epochs
     if args.lr is not None:
         SETTINGS["lr"] = args.lr
+    if args.past_k is not None:
+        SETTINGS["past_k"] = args.past_k
+    if args.future_k is not None:
+        SETTINGS["future_k"] = args.future_k
     if args.fp32:
         SETTINGS["fp16"] = False
         SETTINGS["fused_optimizer"] = False
