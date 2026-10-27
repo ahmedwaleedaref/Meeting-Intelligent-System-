@@ -11,6 +11,8 @@ Only the model: `Qwen/Qwen2.5-1.5B-Instruct` (fp16), `Qwen/Qwen2.5-3B-Instruct` 
 - `c3_exp03_7b`, `c3_exp03_7b_cc`
 
 ## Result
+**Data v3: superseded; rerun on v4 in `notebooks/kaggle_c3_v4.ipynb` (runs `c3_exp03_*_v4`).**
+
 Commit `c0c893b`, data v3 (val, 16,289 segments), the same prompt files as exp01 (sha256 template `80608d05…`, definitions `945cca1c…`). Kaggle 2 × T4: 1.5B and 3B in parallel (17.6 and 10.5 segments/s, ~15 and ~26 min), then 7B (3.3 segments/s, ~82 min). No run failed.
 
 **val macro-F1 (6 targets): 0.5B 0.019 → 1.5B 0.045 → 3B 0.107 → 7B 0.206.** The answer format is followed at every size (mean letter mass ≥ 0.996).
@@ -45,3 +47,7 @@ The 7B recognises the classes with distinctive wording (`cc` 0.414, `cs` 0.378),
 Calibration helps only the 1.5B (0.045 → 0.057) and lowers the 3B and 7B. For the larger models, the content-free "bias" is mostly `other` and `bk`: an empty segment arguably is `other` or a backchannel, so that preference is partly a correct answer, and dividing it out pushes predictions away from `other` (7B: 9,067 → 3,723 `other` predictions, `other` F1 0.742 → 0.406). Raw scores are kept for the larger models.
 
 Limits: the 7B is 4-bit and the others fp16, so size and quantization are not fully separated. Cost: one 7B val run at k = 0, zero-shot takes ~82 min on a T4; context and examples lengthen every prompt, so a 16-cell grid on the 7B would take well over 22 GPU-hours, against ~26 min per run for the 3B.
+
+Compared with the encoder (C1, val macro-F1 ≈ 0.50 on v4; v3 and v4 differ by ~0.6 % of val segments), the best prompted model is far behind.
+
+Next: context and few-shot on the 7B, the only model whose scores carry clear class information, one factor at a time (exp04 onwards) instead of the 16-cell grid, which does not fit the GPU budget.

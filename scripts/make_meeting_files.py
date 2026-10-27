@@ -28,9 +28,7 @@ from smi.labels import LABELS
 
 SPLITS = ("train", "val", "test")
 FLAGS = ("is_nonspeech", "is_empty", "is_nonlabeled")
-# the flags are not required keys : a release built by task A's cleaning step (e.g. v3) removed the
-# flagged rows and then the flag fields themselves (schema/03_release.md) , so they may be absent
-ROW_KEYS = ("seg_id", "meeting", "position", "split", "speaker_id", "text", "label")
+ROW_KEYS = ("seg_id", "meeting", "position", "split", "speaker_id", "text", "label") + FLAGS
 
 
 def read_rows(lines: Iterable[str]) -> list[dict]:
@@ -45,8 +43,7 @@ def read_rows(lines: Iterable[str]) -> list[dict]:
             raise ValueError(f"line {line_no}: missing keys {missing}")
         seg_id = row["seg_id"]
         for flag in FLAGS:
-            # absent = already cleaned out ; present = must be False (unchanged rule for releases that keep them)
-            if flag in row and row[flag] is not False:
+            if row[flag] is not False:
                 raise ValueError(f"{seg_id}: {flag} is {row[flag]!r}, expected False")
         if seg_id in seen_ids:
             raise ValueError(f"line {line_no}: duplicate seg_id {seg_id!r}")
