@@ -50,6 +50,7 @@ SETTINGS = {
     "log_every": 50,
     "fp16": True,             # mixed precision (GPU only) ; False = fp32 , the pre-optimization setup
     "fused_optimizer": True,  # fused AdamW ; False = PyTorch's default implementation
+    "grad_checkpointing": False,  # True = recompute each layer's activations in backward : less memory , ~1/3 more time
 }
 
 
@@ -68,6 +69,9 @@ def run_stage(
     # one seed for everything random : head initialisation , dropout and the train batches
     set_seed(seed)
     model, tokenizer = load_model_and_tokenizer(model_name, labels)
+    # same gradients as without (checked locally , dropout included) ; only active in training mode
+    if SETTINGS["grad_checkpointing"]:
+        model.gradient_checkpointing_enable()
     # on its device before the optimizer is built : fused AdamW needs the parameters on the GPU
     model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
 
@@ -94,7 +98,8 @@ def run_stage(
 
     total_steps = SETTINGS["epochs"] * math.ceil(len(train_loader) / SETTINGS["grad_accum_steps"])
     print(f"[{stage_dir.name}] seed {seed}: {len(train_loader)} train batches per epoch , "
-          f"{total_steps} optimizer steps | fp16 {SETTINGS['fp16']} | fused AdamW {SETTINGS['fused_optimizer']}",
+          f"{total_steps} optimizer steps | fp16 {SETTINGS['fp16']} | fused AdamW {SETTINGS['fused_optimizer']} | "
+          f"grad checkpointing {SETTINGS['grad_checkpointing']}",
           flush=True)
 
     # every history line is printed and appended to history.jsonl as soon as train creates it
@@ -200,6 +205,8 @@ def main() -> None:
     parser.add_argument("--lr", type=float, default=None, help="override SETTINGS['lr']")
     parser.add_argument("--past-k", type=int, default=None, help="override SETTINGS['past_k'] (context segments before)")
     parser.add_argument("--future-k", type=int, default=None, help="override SETTINGS['future_k'] (context segments after)")
+    parser.add_argument("--grad-checkpointing", action="store_true",
+                        help="recompute activations in backward : for inputs too long for the GPU's memory at this batch size")
     parser.add_argument("--fp32", action="store_true",
                         help="fp16 and fused AdamW off : the pre-optimization setup (e.g. to reproduce the first seed-42 run)")
     args = parser.parse_args()
@@ -211,6 +218,8 @@ def main() -> None:
         SETTINGS["past_k"] = args.past_k
     if args.future_k is not None:
         SETTINGS["future_k"] = args.future_k
+    if args.grad_checkpointing:
+        SETTINGS["grad_checkpointing"] = True
     if args.fp32:
         SETTINGS["fp16"] = False
         SETTINGS["fused_optimizer"] = False
