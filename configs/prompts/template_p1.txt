@@ -1,0 +1,9 @@
+The following is an excerpt from a meeting transcript. Which dialogue act does the segment between [T] and [/T] perform?
+
+Choices:
+{options}
+{examples}
+Excerpt:
+{transcript}
+
+Reply with a single letter.

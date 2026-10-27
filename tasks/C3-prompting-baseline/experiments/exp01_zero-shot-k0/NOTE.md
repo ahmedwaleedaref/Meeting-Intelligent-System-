@@ -5,13 +5,26 @@ How well does the smallest prompted model do with the simplest prompt: zero-shot
 None: this is the first prompting run.
 - Model `Qwen/Qwen2.5-0.5B-Instruct`, fp16 on one Kaggle T4, letter scoring (softmax over the logits of A–G).
 - Prompt `template_v1.txt` + `definitions_v1.txt`, no few-shot examples, `past_k = future_k = 0`.
-- Data v3, val split (16,289 segments).
-- Notebook `notebooks/kaggle_c3_exp01.ipynb`; driver `scripts/trial_prompting.py` (trial runs, not reportable: PROTOCOL §4.1).
+- Data v4, val split (16,188 segments); first run on v3 (16,289 segments).
+- Notebooks `notebooks/kaggle_c3_v4.ipynb` (v4) and `notebooks/kaggle_c3_exp01.ipynb` (v3); driver `scripts/trial_prompting.py` (trial runs, not reportable: PROTOCOL §4.1).
 
 ## Runs
-- `c3_exp01_zs_k0_defs`
+- v4: `c3_exp01_v4`
+- v3: `c3_exp01_zs_k0_defs`
 
 ## Result
+### v4 (reported)
+commit `ec7f1d4` (same `src/` and prompt files as `c0c893b`), notebook `notebooks/kaggle_c3_v4.ipynb`, Kaggle T4, data v4 (val 16,188 segments, the encoder's data); 51 segments/s.
+
+**val macro-F1 (6 targets) = 0.019**, mean letter mass 0.996.
+
+| | cs | co | aa | bk | ar | cc | other |
+|---|---|---|---|---|---|---|---|
+| F1 | 0.069 | 0.032 | 0.007 | 0.000 | 0.000 | 0.006 | 0.021 |
+
+Predicted: A (cs) 11,777, F (cc) 4,079, G (other) 184, B (co) 141, C (aa) 7. Same picture as v3.
+
+### v3 (first runs, superseded; kept for the record)
 Commit `fde4a7e` (same code as `7845789`, message edited), Kaggle T4, fp16, batch 32: 16,289 segments in ~4.7 min (58 segments/s).
 
 **val macro-F1 (6 targets) = 0.019.** Mean letter mass 0.996 (min 0.965): the answer format is followed.

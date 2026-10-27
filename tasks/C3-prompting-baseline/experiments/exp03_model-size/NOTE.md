@@ -6,13 +6,23 @@ Only the model: `Qwen/Qwen2.5-1.5B-Instruct` (fp16), `Qwen/Qwen2.5-3B-Instruct` 
 - Notebook `notebooks/kaggle_c3_exp03.ipynb`: 1.5B and 3B in parallel (one per T4), then 7B.
 
 ## Runs
+- v4: `c3_exp03_1.5b_v4`, `c3_exp03_3b_v4`, `c3_exp03_7b_v4`, each with `_cc` (calibrated)
 - `c3_exp03_1.5b`, `c3_exp03_1.5b_cc`
 - `c3_exp03_3b`, `c3_exp03_3b_cc`
 - `c3_exp03_7b`, `c3_exp03_7b_cc`
 
 ## Result
-**Data v3: superseded; rerun on v4 in `notebooks/kaggle_c3_v4.ipynb` (runs `c3_exp03_*_v4`).**
+### v4 (reported)
+commit `ec7f1d4` (same `src/` and prompt files as `c0c893b`), notebook `notebooks/kaggle_c3_v4.ipynb`, Kaggle T4, data v4 (val 16,188 segments, the encoder's data). Speed: 1.5B 18.2, 3B 9.1, 7B 3.6 segments/s. Every score is within 0.002 of v3.
 
+| Model | macro-F1 | calibrated | cs | co | aa | bk | ar | cc | other |
+|---|---|---|---|---|---|---|---|---|---|
+| 0.5B (exp01) | 0.019 | 0.012 | 0.069 | 0.032 | 0.007 | 0.000 | 0.000 | 0.006 | 0.021 |
+| 1.5B | 0.046 | 0.057 | 0.020 | 0.000 | 0.045 | 0.208 | 0.000 | 0.000 | 0.356 |
+| 3B | 0.107 | 0.089 | 0.267 | 0.018 | 0.002 | 0.306 | 0.015 | 0.036 | 0.422 |
+| 7B (4-bit) | 0.207 | 0.182 | 0.379 | 0.138 | 0.041 | 0.219 | 0.050 | 0.414 | 0.742 |
+
+### v3 (first runs, superseded; kept for the record)
 Commit `c0c893b`, data v3 (val, 16,289 segments), the same prompt files as exp01 (sha256 template `80608d05…`, definitions `945cca1c…`). Kaggle 2 × T4: 1.5B and 3B in parallel (17.6 and 10.5 segments/s, ~15 and ~26 min), then 7B (3.3 segments/s, ~82 min). No run failed.
 
 **val macro-F1 (6 targets): 0.5B 0.019 → 1.5B 0.045 → 3B 0.107 → 7B 0.206.** The answer format is followed at every size (mean letter mass ≥ 0.996).

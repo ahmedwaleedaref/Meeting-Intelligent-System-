@@ -40,6 +40,14 @@ def test_option_files_list_the_seven_letters_in_order():
         assert [line[:2] for line in lines] == [letter + ")" for letter in LETTERS], name
 
 
+def test_every_template_has_each_blank_exactly_once():
+    # a missing blank would silently drop the options , the examples or the transcript from every prompt
+    for name in ("template_v1.txt", "template_p1.txt", "template_p2.txt"):
+        template = load_prompt(name)
+        for blank in ("{options}", "{examples}", "{transcript}"):
+            assert template.count(blank) == 1, (name, blank)
+
+
 def test_zero_shot_prompt_is_complete():
     prompt = render_prompt(make_item("I'll send it ."), load_prompt("template_v1.txt"), load_prompt("names_v1.txt"), [])
     assert "{" not in prompt  # every blank was filled
