@@ -14,6 +14,7 @@ output folder runs/<run-name>/ :
 usage (from the repo root) :
     PYTHONPATH=src python scripts/trial_prompting.py --data-root data/v3_meetings --run-name c3_exp01_k0_defs
     add --limit 50 for a quick check on the first 50 segments (metrics then cover those segments only)
+    add --prefix-cache for few-shot runs : the tokens every prompt shares run once (same scores , much faster)
 """
 
 import argparse
@@ -28,9 +29,14 @@ from smi.eval.gold import load_gold
 from smi.eval.prediction_schema import write_predictions
 from smi.inputs.dataset import SegmentDataset
 from smi.labels import LABELS
-from smi.prompting.backend import load_model, score_batch
+from smi.prompting.backend import (build_prefix_cache, common_prefix_len, load_model, score_batch, score_suffixes,
+                                   tokenize_prompts)
 from smi.prompting.render import PROMPTS_DIR, load_prompt, render_prompt
-from smi.prompting.shots import pick_shots
+from smi.prompting.shots import SHOT_ORDERS, order_shots, pick_shots
+
+# --prefix-cache : the largest difference allowed between cached and full-prompt probabilities on the first batch.
+# fp16 rounds slightly differently when the prompt is split in two ; a wrong mask or position moves far more.
+PREFIX_CACHE_TOLERANCE = 0.02
 
 
 def parse_args(argv=None):
@@ -47,6 +53,10 @@ def parse_args(argv=None):
     parser.add_argument("--future-k", type=int, default=0)
     parser.add_argument("--shots-per-class", type=int, default=0, help="0 = zero-shot")
     parser.add_argument("--shot-seed", type=int, default=0)
+    parser.add_argument("--shot-order", default="labels", choices=SHOT_ORDERS, help="order of the few-shot examples")
+    parser.add_argument("--shot-order-seed", type=int, default=0, help="seed of --shot-order shuffled")
+    parser.add_argument("--prefix-cache", action="store_true",
+                        help="run the tokens every prompt shares once (much faster with few-shot examples)")
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--limit", type=int, default=None, help="score only the first N segments (quick checks)")
     return parser.parse_args(argv)
@@ -66,6 +76,44 @@ def git_commit() -> str | None:
         return None
 
 
+def full_prompt_batches(model, tokenizer, letter_ids, todo, prompts, batch_size):
+    """
+    (batch of items , their scores) , every prompt run in full.
+    prompts sorted longest first (similar lengths share a batch = little padding ;
+    an out-of-memory error shows up in the first batch , not after an hour)
+    """
+    todo = sorted(todo, key=lambda item: len(prompts[item["seg_id"]]), reverse=True)
+    for b in range(0, len(todo), batch_size):
+        batch = todo[b : b + batch_size]
+        yield batch, score_batch(model, tokenizer, letter_ids, [prompts[item["seg_id"]] for item in batch])
+
+
+def cached_prefix_batches(model, tokenizer, letter_ids, todo, prompts, batch_size, info: dict):
+    """
+    the same as full_prompt_batches , faster : the tokens all prompts share are run once (backend.py , prefix cache).
+    the first batch is also scored in full , and the run stops if the two differ by more than PREFIX_CACHE_TOLERANCE.
+    info receives the shared length and the measured difference , for metrics.json.
+    """
+    ids = dict(zip([item["seg_id"] for item in todo], tokenize_prompts(tokenizer, [prompts[item["seg_id"]] for item in todo])))
+    prefix_len = common_prefix_len(list(ids.values()))
+    cache = build_prefix_cache(model, ids[todo[0]["seg_id"]][:prefix_len], batch_size)
+    todo = sorted(todo, key=lambda item: len(ids[item["seg_id"]]), reverse=True)  # longest first , as above
+    for b in range(0, len(todo), batch_size):
+        batch = todo[b : b + batch_size]
+        suffixes = [ids[item["seg_id"]][prefix_len:] for item in batch]
+        # the cache has batch_size rows : a short last batch is filled up with copies of its last prompt
+        suffixes += [suffixes[-1]] * (batch_size - len(batch))
+        results = score_suffixes(model, letter_ids, cache, prefix_len, suffixes, tokenizer.pad_token_id)[: len(batch)]
+        if b == 0:
+            full = score_batch(model, tokenizer, letter_ids, [prompts[item["seg_id"]] for item in batch])
+            diff = max(abs(x - y) for r, f in zip(results, full) for x, y in zip(r["probs"], f["probs"]))
+            info.update(shared_tokens=prefix_len, first_batch_max_abs_diff=diff)
+            print(f"prefix cache : {prefix_len} shared tokens , first batch differs from full prompts by {diff:.1e}", flush=True)
+            if diff > PREFIX_CACHE_TOLERANCE:
+                raise SystemExit(f"prefix-cached scores differ from full-prompt scores by {diff:.3g} : run without --prefix-cache")
+        yield batch, results
+
+
 def main(argv=None) -> None:
     args = parse_args(argv)
     data_root = Path(args.data_root)
@@ -82,6 +130,7 @@ def main(argv=None) -> None:
     shots = []
     if args.shots_per_class > 0:
         shots = pick_shots(data_root / "train", args.past_k, args.future_k, args.shots_per_class, args.shot_seed)
+        shots = order_shots(shots, args.shot_order, args.shot_order_seed)
 
     # ---- 2. settings.json : what this run is. a restarted run must have exactly the same settings
     source = json.loads((data_root / "source.json").read_text(encoding="utf-8"))
@@ -110,24 +159,25 @@ def main(argv=None) -> None:
     todo = [item for item in items if item["seg_id"] not in done]
     print(f"{len(items)} segments , {len(done)} already scored , {len(todo)} to score", flush=True)
 
-    # ---- 4. score : prompts sorted longest first (similar lengths share a batch = little padding ;
-    #         an out-of-memory error shows up in the first batch , not after an hour)
+    # ---- 4. score , in batches (full_prompt_batches , cached_prefix_batches)
+    prefix_info: dict = {}
     if todo:
         model, tokenizer, letter_ids = load_model(args.model, load_in_4bit=args.load_in_4bit)
         prompts = {item["seg_id"]: render_prompt(item, template, options, shots) for item in todo}
-        todo.sort(key=lambda item: len(prompts[item["seg_id"]]), reverse=True)
-        start = time.time()
+        if args.prefix_cache:
+            batches = cached_prefix_batches(model, tokenizer, letter_ids, todo, prompts, args.batch_size, prefix_info)
+        else:
+            batches = full_prompt_batches(model, tokenizer, letter_ids, todo, prompts, args.batch_size)
+        start, n = time.time(), 0
         with open(scores_path, "a", encoding="utf-8") as f:
-            for b in range(0, len(todo), args.batch_size):
-                batch = todo[b : b + args.batch_size]
-                results = score_batch(model, tokenizer, letter_ids, [prompts[item["seg_id"]] for item in batch])
+            for i, (batch, results) in enumerate(batches):
                 for item, result in zip(batch, results):
                     row = {"seg_id": item["seg_id"], "probs": result["probs"], "letter_mass": result["letter_mass"]}
                     f.write(json.dumps(row) + "\n")
                     done[item["seg_id"]] = row
                 f.flush()  # on disk now : survives a crash
-                n = b + len(batch)
-                if (b // args.batch_size) % 50 == 0 or n == len(todo):
+                n += len(batch)
+                if i % 50 == 0 or n == len(todo):
                     rate = n / (time.time() - start)
                     print(f"  {n}/{len(todo)}  {rate:.1f} segments/s  ~{(len(todo) - n) / rate / 60:.0f} min left", flush=True)
 
@@ -147,6 +197,8 @@ def main(argv=None) -> None:
         "n_scored": len(items),
         "git_commit": git_commit(),
     }}
+    if prefix_info:
+        extra["prompting"]["prefix_cache"] = prefix_info
     if args.limit is None:
         result = evaluate(out / "predictions.jsonl", split_dir, out / "metrics.json", extra=extra)
     else:

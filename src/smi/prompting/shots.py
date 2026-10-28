@@ -9,6 +9,9 @@ from pathlib import Path
 from smi.inputs.dataset import SegmentDataset, SegmentItem
 from smi.labels import LABELS
 
+# the orders order_shots() can put the examples in ; "labels" is pick_shots' own order
+SHOT_ORDERS: tuple[str, ...] = ("labels", "reversed", "shuffled")
+
 
 def pick_shots(train_dir: str | Path, past_k: int, future_k: int, per_class: int, seed: int) -> list[SegmentItem]:
     """
@@ -37,3 +40,26 @@ def pick_shots(train_dir: str | Path, past_k: int, future_k: int, per_class: int
         for index in rng.sample(class_indices, per_class):  # per_class different segments of this class
             shots.append(dataset[index])
     return shots
+
+
+def order_shots(shots: list[SegmentItem], order: str, seed: int) -> list[SegmentItem]:
+    """
+    the same examples in another order : the label of the last example pulls the answer (recency bias ,
+    Zhao et al. 2021) , and in pick_shots' order the last one is always "other".
+    order : "labels"   = unchanged (cs first , ... , other last)
+            "reversed" = the opposite (other first , cs last)
+            "shuffled" = a random permutation ; the same seed always gives the same order
+    seed  : used by "shuffled" only , separate from pick_shots' seed so the examples stay the same
+    raises ValueError on an order not in SHOT_ORDERS
+    """
+    match order:
+        case "labels":
+            return list(shots)
+        case "reversed":
+            return list(reversed(shots))
+        case "shuffled":
+            shuffled = list(shots)
+            random.Random(seed).shuffle(shuffled)
+            return shuffled
+        case _:
+            raise ValueError(f"unknown shot order {order!r}, expected one of {SHOT_ORDERS}")

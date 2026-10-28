@@ -53,17 +53,20 @@ Implementation:
 - Definitions are paraphrased from the MRDA labelling manual (Dhillon et al. 2004, the sections Accept, Reject, Acknowledgment, Command, Suggestion, Commitment) — the model is judged against the annotators' rules, so it gets the same rules.
 - `other` is defined to include plain backchannels ("uhhuh" while someone else is talking) — the project maps the MRDA backchannel tag `b` to `other`, and the manual names `b` / `bk` / `aa` as the most confused tags.
 - Few-shot examples are drawn per class with Python's `random.Random(seed)`, in `LABELS` order, with the same context window as the question; their seg_ids go into `settings.json` — the same seed gives the same segments at every k.
+- `--shot-order` (`labels`, `reversed`, `shuffled` with `--shot-order-seed`) reorders the same examples; the default keeps `LABELS` order — in that order the last example is always `other`, and the last example's label pulls the answer (recency bias, exp08).
 - One prompt for everything, with the transcript last — instructions are read before the data; definitions on/off swaps only the options block, so the two variants differ in nothing else.
 From the results:
 - All reported runs on data v4 — the encoder's data, so the numbers are comparable.
 - Larger models before any prompt grid (after exp01) — the 0.5B answers by letter, so a grid on it would measure its bias.
-- Contextual calibration dropped (exp02, exp03) — it helps only the 1.5B and lowers the 3B and 7B.
+- Contextual calibration dropped (exp02, exp03) — it helps only the 1.5B and lowers the 3B and 7B. Revisited with few-shot prompts and a train-frequency target in exp08.
 - Experiments on the 7B, one factor at a time, instead of the 16-cell grid — a 7B val run takes 1.5–2 h, so the grid does not fit the GPU budget.
 - k = 0 for exp05–exp07 — k = 1 scores the same (exp04) with shorter, faster prompts.
 - A difference counts only if it exceeds the prompt-noise spread (~0.04, exp07).
 
 Execution:
 - Each run writes every segment's scores to `scores.jsonl` as it goes; rerunning the same command skips scored segments, and a different setting under the same run name is refused — survives Kaggle's 12 h cap. Local scoring is deterministic, so no cross-run response cache is needed until an API backend exists.
+- `--prefix-cache` (off by default): the tokens every prompt of a run shares (instruction, options, examples) go through the model once, and each batch runs only its own tokens — few-shot prompts are mostly shared text. The first batch is also scored in full and the run stops if the two differ by more than 0.02 (fp16 rounds slightly differently); the shared length and the difference go into `metrics.json`.
+- `scripts/calibrate_prompting.py` takes several runs of one model (one model load) and `--target uniform` (the paper, `_cc`) and/or `train-prior` (the train label frequencies, `_ccp`).
 
 ## Experiments
 
@@ -76,3 +79,4 @@ Execution:
 | [exp05](experiments/exp05_few-shot-7b/NOTE.md) | Does one solved example per label help 7B (k = 0)? | v4: macro-F1 0.298 (zero-shot 0.207); `other` predicted 11,080 times (gold 13,543); `aa` / `ar` / `co` F1 up, `bk` down to 0.071 | yes: the only change clearly beyond prompt noise (+0.091); the short-reply confusion moves from `bk` to `aa`; one example draw only |
 | [exp06](experiments/exp06_no-definitions-7b/NOTE.md) | Do the label definitions help 7B, or are the names enough? | v4: macro-F1 0.217 vs 0.207 with definitions; without them `aa` F1 0.000, `cc` 0.043, `ar` 0.557 | no difference on average (within noise), but the definitions decide which classes the model uses; names only is 2.8 × faster |
 | [exp07](experiments/exp07_prompt-noise-7b/NOTE.md) | How much does rewording the instruction move the 7B score (prompt noise)? | v4: macro-F1 0.207 / 0.219 / 0.242 for three wordings; spread 0.036 | differences below ~0.04 are noise: few-shot is real, definitions off and context are not |
+| [exp08](experiments/exp08_calibration-order-7b/NOTE.md) | With examples in the prompt (exp05), does calibration (uniform or train-frequency target) help, and do the order and number of examples matter? (data v3, with its own v3 control) | pending | pending |

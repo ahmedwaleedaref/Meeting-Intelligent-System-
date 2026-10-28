@@ -15,6 +15,7 @@ from tests.prompting.test_backend import MODEL
 from tests.prompting.test_shots import write_split
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import calibrate_prompting  # noqa: E402
 import trial_prompting  # noqa: E402
 
 
@@ -47,3 +48,26 @@ def test_a_few_shot_run_with_context_writes_valid_predictions_and_metrics(tmp_pa
     assert 0.0 <= metrics["prompting"]["mean_letter_mass"] <= 1.0
     settings = json.loads((out / "settings.json").read_text(encoding="utf-8"))
     assert len(settings["shot_seg_ids"]) == len(LABELS)  # one example per class
+
+
+def test_prefix_cache_and_shot_order_reproduce_the_full_run_and_calibrate(tmp_path, model_available):
+    data_root = tmp_path / "data"
+    write_split(data_root / "train", n_meetings=1, per_label=2)
+    write_split(data_root / "val", n_meetings=1, per_label=1)
+    (data_root / "source.json").write_text(json.dumps({"data_version": "toy"}), encoding="utf-8")
+    common = ["--data-root", str(data_root), "--out-dir", str(tmp_path / "runs"), "--shots-per-class", "1",
+              "--shot-order", "reversed", "--batch-size", "4"]
+
+    trial_prompting.main(common + ["--run-name", "full"])
+    trial_prompting.main(common + ["--run-name", "cached", "--prefix-cache"])
+    calibrate_prompting.main(["--data-root", str(data_root), "--run", str(tmp_path / "runs" / "cached"),
+                              "--target", "uniform", "train-prior"])
+
+    def scores(name):
+        return {row["seg_id"]: row["probs"] for row in map(json.loads, open(tmp_path / "runs" / name / "scores.jsonl"))}
+    full, cached = scores("full"), scores("cached")
+    assert all(cached[seg_id] == pytest.approx(full[seg_id], abs=1e-4) for seg_id in full)
+    metrics = json.loads((tmp_path / "runs" / "cached" / "metrics.json").read_text(encoding="utf-8"))
+    assert metrics["prompting"]["prefix_cache"]["shared_tokens"] > 0
+    for suffix in ("_cc", "_ccp"):
+        load_predictions(tmp_path / "runs" / f"cached{suffix}" / "predictions.jsonl")
