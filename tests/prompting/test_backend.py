@@ -5,8 +5,8 @@ skipped when the model cannot be loaded (no internet and not in the local Huggin
 
 import pytest
 
-from smi.prompting.backend import (build_prefix_cache, common_prefix_len, load_model, score_batch, score_suffixes,
-                                   tokenize_prompts)
+from smi.prompting.backend import (build_prefix_cache, common_prefix_len, compare_prefix_cache, largest_diff, load_model,
+                                   score_batch, score_suffixes, tokenize_prompts)
 
 MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
 
@@ -14,6 +14,11 @@ PROMPTS = [
     "Answer with one letter from A to G.",
     "Here is a much longer prompt , so the batch needs padding . " * 5 + "Answer with one letter from A to G.",
     "Which letter comes first in the alphabet ? Answer with one letter.",
+]
+
+SHARED_PROMPTS = [
+    "Options: A, B, C, D, E, F, G. Here is a shared instruction. " * 4 + ending
+    for ending in ("Answer: which letter first?", "Answer with one letter, please, any letter.", "Go.")
 ]
 
 
@@ -64,11 +69,23 @@ def test_common_prefix_len_leaves_one_token_of_each_sequence():
 
 def test_prefix_cached_scores_equal_full_prompt_scores(loaded):
     model, tokenizer, letter_ids = loaded
-    prompts = ["Options: A, B, C, D, E, F, G. Here is a shared instruction. " * 4 + ending
-               for ending in ("Answer: which letter first?", "Answer with one letter, please, any letter.", "Go.")]
+    prompts = SHARED_PROMPTS
     ids = tokenize_prompts(tokenizer, prompts)
     prefix_len = common_prefix_len(ids)
     cache = build_prefix_cache(model, ids[0][:prefix_len], len(prompts))
     cached = score_suffixes(model, letter_ids, cache, prefix_len, [s[prefix_len:] for s in ids], tokenizer.pad_token_id)
     for prompt, result in zip(prompts, cached):
         assert result["probs"] == pytest.approx(score_batch(model, tokenizer, letter_ids, [prompt])[0]["probs"], abs=1e-4)
+
+
+def test_compare_prefix_cache_passes_in_fp32(loaded):
+    model, tokenizer, letter_ids = loaded
+    prefix_len = common_prefix_len(tokenize_prompts(tokenizer, SHARED_PROMPTS))
+    check = compare_prefix_cache(model, tokenizer, letter_ids, SHARED_PROMPTS, prefix_len)
+    assert check["cached"] < 1e-4 and check["cached"] <= check["allowed"]
+
+
+def test_largest_diff_is_over_every_prompt_and_letter():
+    first = [{"probs": [0.5, 0.5]}, {"probs": [0.9, 0.1]}]
+    second = [{"probs": [0.4, 0.6]}, {"probs": [0.6, 0.4]}]
+    assert largest_diff(first, second) == pytest.approx(0.3)

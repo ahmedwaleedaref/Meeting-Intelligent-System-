@@ -65,7 +65,7 @@ From the results:
 
 Execution:
 - Each run writes every segment's scores to `scores.jsonl` as it goes; rerunning the same command skips scored segments, and a different setting under the same run name is refused — survives Kaggle's 12 h cap. Local scoring is deterministic, so no cross-run response cache is needed until an API backend exists.
-- `--prefix-cache` (off by default): the tokens every prompt of a run shares (instruction, options, examples) go through the model once, and each batch runs only its own tokens — few-shot prompts are mostly shared text. The first batch is also scored in full and the run stops if the two differ by more than 0.02 (fp16 rounds slightly differently); the shared length and the difference go into `metrics.json`.
+- `--prefix-cache` (off by default): the tokens every prompt of a run shares (instruction, options, examples) go through the model once, and each batch runs only its own tokens — few-shot prompts are mostly shared text. Before scoring, the 8 longest prompts are checked against each full prompt scored alone: the cache must stay within 3 × the usual padded batch's own difference + 0.01, or the run stops (fp16 moves scores a little whenever batching changes: up to 0.08 on the 7B); the shared length and the check go into `metrics.json`.
 - `scripts/calibrate_prompting.py` takes several runs of one model (one model load) and `--target uniform` (the paper, `_cc`) and/or `train-prior` (the train label frequencies, `_ccp`).
 
 ## Experiments

@@ -29,14 +29,14 @@ from smi.eval.gold import load_gold
 from smi.eval.prediction_schema import write_predictions
 from smi.inputs.dataset import SegmentDataset
 from smi.labels import LABELS
-from smi.prompting.backend import (build_prefix_cache, common_prefix_len, load_model, score_batch, score_suffixes,
-                                   tokenize_prompts)
+from smi.prompting.backend import (build_prefix_cache, common_prefix_len, compare_prefix_cache, load_model, score_batch,
+                                   score_suffixes, tokenize_prompts)
 from smi.prompting.render import PROMPTS_DIR, load_prompt, render_prompt
 from smi.prompting.shots import SHOT_ORDERS, order_shots, pick_shots
 
-# --prefix-cache : the largest difference allowed between cached and full-prompt probabilities on the first batch.
-# fp16 rounds slightly differently when the prompt is split in two ; a wrong mask or position moves far more.
-PREFIX_CACHE_TOLERANCE = 0.02
+# --prefix-cache : how many of the longest prompts are checked against full prompts before scoring
+# (few : each is also scored alone , and long full prompts in a batch are what fills the GPU memory)
+PREFIX_CACHE_CHECK = 8
 
 
 def parse_args(argv=None):
@@ -91,27 +91,27 @@ def full_prompt_batches(model, tokenizer, letter_ids, todo, prompts, batch_size)
 def cached_prefix_batches(model, tokenizer, letter_ids, todo, prompts, batch_size, info: dict):
     """
     the same as full_prompt_batches , faster : the tokens all prompts share are run once (backend.py , prefix cache).
-    the first batch is also scored in full , and the run stops if the two differ by more than PREFIX_CACHE_TOLERANCE.
-    info receives the shared length and the measured difference , for metrics.json.
+    before scoring , the longest prompts are checked against full prompts (compare_prefix_cache) ; the run stops if
+    the cache is off by more than allowed. info receives the shared length and the check , for metrics.json.
     """
     ids = dict(zip([item["seg_id"] for item in todo], tokenize_prompts(tokenizer, [prompts[item["seg_id"]] for item in todo])))
     prefix_len = common_prefix_len(list(ids.values()))
-    cache = build_prefix_cache(model, ids[todo[0]["seg_id"]][:prefix_len], batch_size)
     todo = sorted(todo, key=lambda item: len(ids[item["seg_id"]]), reverse=True)  # longest first , as above
+
+    check = compare_prefix_cache(model, tokenizer, letter_ids, [prompts[item["seg_id"]] for item in todo[:PREFIX_CACHE_CHECK]], prefix_len)
+    info.update(shared_tokens=prefix_len, check=check)
+    print(f"prefix cache : {prefix_len} shared tokens ; largest difference from full prompts alone : "
+          f"cached {check['cached']:.1e} , padded batch {check['padded']:.1e} , allowed {check['allowed']:.1e}", flush=True)
+    if check["cached"] > check["allowed"]:
+        raise SystemExit("prefix-cached scores are further from full prompts than allowed : run without --prefix-cache")
+
+    cache = build_prefix_cache(model, ids[todo[0]["seg_id"]][:prefix_len], batch_size)
     for b in range(0, len(todo), batch_size):
         batch = todo[b : b + batch_size]
         suffixes = [ids[item["seg_id"]][prefix_len:] for item in batch]
         # the cache has batch_size rows : a short last batch is filled up with copies of its last prompt
         suffixes += [suffixes[-1]] * (batch_size - len(batch))
-        results = score_suffixes(model, letter_ids, cache, prefix_len, suffixes, tokenizer.pad_token_id)[: len(batch)]
-        if b == 0:
-            full = score_batch(model, tokenizer, letter_ids, [prompts[item["seg_id"]] for item in batch])
-            diff = max(abs(x - y) for r, f in zip(results, full) for x, y in zip(r["probs"], f["probs"]))
-            info.update(shared_tokens=prefix_len, first_batch_max_abs_diff=diff)
-            print(f"prefix cache : {prefix_len} shared tokens , first batch differs from full prompts by {diff:.1e}", flush=True)
-            if diff > PREFIX_CACHE_TOLERANCE:
-                raise SystemExit(f"prefix-cached scores differ from full-prompt scores by {diff:.3g} : run without --prefix-cache")
-        yield batch, results
+        yield batch, score_suffixes(model, letter_ids, cache, prefix_len, suffixes, tokenizer.pad_token_id)[: len(batch)]
 
 
 def main(argv=None) -> None:

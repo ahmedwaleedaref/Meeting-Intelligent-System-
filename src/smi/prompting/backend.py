@@ -143,3 +143,30 @@ def score_suffixes(model, letter_ids: list[int], prefix_cache, prefix_len: int, 
         out = model(input_ids=ids, attention_mask=torch.cat([prefix_mask, suffix_mask], dim=1),
                     position_ids=position_ids, past_key_values=cache, logits_to_keep=1)
     return letter_scores(out.logits[:, -1, :], letter_ids)
+
+
+# check : in fp16 , any change in how a prompt is batched moves its probabilities a little (exp08's first 7B try :
+# up to 0.08 between cached and padded batches). the cache passes if it stays within CHECK_FACTOR times the
+# padded batch's own difference , plus CHECK_FLOOR ; a wrong mask or position moves scores far more.
+CHECK_FACTOR = 3.0
+CHECK_FLOOR = 0.01
+
+
+def compare_prefix_cache(model, tokenizer, letter_ids: list[int], prompts: list[str], prefix_len: int) -> dict[str, float]:
+    """
+    how far prefix-cached scores are from each full prompt scored alone (no padding : the reference) ,
+    next to how far score_batch's usual padded batch already is. prompts : a few prompts sharing prefix_len tokens.
+    returns the largest probability difference from the reference : {"cached": ... , "padded": ... , "allowed": ...}
+    """
+    ids = tokenize_prompts(tokenizer, prompts)
+    cache = build_prefix_cache(model, ids[0][:prefix_len], len(prompts))
+    cached = score_suffixes(model, letter_ids, cache, prefix_len, [s[prefix_len:] for s in ids], tokenizer.pad_token_id)
+    padded = score_batch(model, tokenizer, letter_ids, prompts)
+    alone = [score_batch(model, tokenizer, letter_ids, [p])[0] for p in prompts]
+    padded_diff = largest_diff(padded, alone)
+    return {"cached": largest_diff(cached, alone), "padded": padded_diff, "allowed": CHECK_FACTOR * padded_diff + CHECK_FLOOR}
+
+
+def largest_diff(results: list[dict], reference: list[dict]) -> float:
+    """the largest difference between two lists of scores , over every prompt and letter."""
+    return max(abs(x - y) for r, ref in zip(results, reference) for x, y in zip(r["probs"], ref["probs"]))
