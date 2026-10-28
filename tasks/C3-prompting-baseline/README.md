@@ -6,9 +6,9 @@ A prompting baseline (an LLM classifying each segment from a prompt, without fin
 Full description: [task.md](task.md). Design: [DESIGN.md](../C-baselines/DESIGN.md), Part 6.
 
 ## Status
-Experiments done; in review. Deliverables (task.md): the [Part 1 note](part1-note.md); the code in `src/smi/prompting/`, `scripts/trial_prompting.py`, `scripts/calibrate_prompting.py`, `configs/prompts/` and `tests/prompting/` (21 tests); experiments exp01–exp07 below, each with a NOTE. Next: review, then a PR.
+Experiments done; in review. Deliverables (task.md): the [Part 1 note](part1-note.md); the code in `src/smi/prompting/`, `scripts/trial_prompting.py`, `scripts/calibrate_prompting.py`, `configs/prompts/` and `tests/prompting/` (34 tests); experiments exp01–exp09 below, each with a NOTE. Next: review, then a PR.
 
-Data: release **v4** (`data/v4_meetings`, val 16,188 segments), the same data as the encoder (C1). exp01–exp04 were first run on v3 while v4 was not available locally; they were rerun on v4 with the same code (scores within 0.002 of v3), and every result below is on v4. All runs are trial runs of the temporary driver (PROTOCOL §4.1), on val; test was never read.
+Data: release **v4** (`data/v4_meetings`, val 16,188 segments), the same data as the encoder (C1). exp01–exp04 were first run on v3 while v4 was not available locally; they were rerun on v4 with the same code (scores within 0.002 of v3), and every result below is on v4 except exp08 and exp09, which ran on v3 (exp08 against its own v3 control). All runs are trial runs of the temporary driver (PROTOCOL §4.1), on val; test was never read.
 
 ### Results (val macro-F1 over the 6 target classes)
 
@@ -20,16 +20,22 @@ Data: release **v4** (`data/v4_meetings`, val 16,188 segments), the same data as
 | 7B, context k = 1 / k = 3 (exp04) | 0.208 / 0.185 |
 | 7B, names only, no definitions (exp06) | 0.217 |
 | 7B, two reworded instructions (exp07) | 0.219 / 0.242 |
-| **7B, one train example per class (exp05)** | **0.298** |
+| 7B, one train example per class (exp05) | 0.298 |
+| 7B, one example per class, label / reversed / shuffled order (exp08, v3) | 0.271 / 0.214 / 0.278 |
+| 7B, three train examples per class, two draws: seed 0 / seed 1 (exp09, v3) | 0.251 / 0.297 |
+| **7B, two train examples per class (exp08, v3)** | **0.341** |
 | *Encoder, DeBERTa-v3-base fine-tuned (C1 exp01, 3 seeds)* | *0.499* |
 
 - **Model size is the first lever** (0.019 → 0.207 from 0.5B to 7B). Small models answer by letter, not by content.
-- **Prompt noise is ~0.04** (exp07): context, definitions off and calibration stay within it; **few-shot (+0.091) is the only change clearly beyond it**.
-- **The hardest call is the short replies** (`aa` / `bk` / `other`: "yeah", "OK"), the same as for the encoder; each setting moves the confusion between them rather than removing it.
-- **Prompting reaches ~60 % of the fine-tuned encoder's score** (0.298 vs 0.499) with no training on our data.
+- **Prompt noise is ~0.04** (exp07): context and definitions off stay within it; **few-shot examples are the change clearly beyond it**: +0.091 with one per class (exp05), +0.070 more with two (exp08). But which examples are drawn matters too: two draws of three per class differ by 0.046, and both score below two per class (exp09).
+- **The order of the examples matters** (exp08): with `cs` last instead of `other`, the model over-predicts `cs` and macro-F1 drops by 0.057 (recency bias).
+- **Calibration does not help** (exp02, exp03, exp08): the paper's uniform target lowers every 3B / 7B run, the more so the more the model leans to `other` on empty inputs; a train-frequency target is within noise of the raw scores.
+- **The hardest call is the short replies** (`aa` / `bk` / `other`: "yeah", "OK"), the same as for the encoder; each setting moves the confusion between them rather than removing it. At k = 0 identical texts get identical answers, so the examples decide whether all 608 "OK" segments become `bk` or `other` (exp09).
+- **Prompting reaches ~68 % of the fine-tuned encoder's score** (0.341 on v3 vs 0.499 on v4) with no training on our data.
 
 ### Limits
-- One prompting run per setting; the few-shot gain rests on one draw of examples (seed 0), and the noise spread was measured on zero-shot prompts only.
+- One prompting run per setting; the few-shot gains rest on one draw of examples per number of examples (two at three per class, exp09), and the draw alone moves the score by ~0.05, so the best score (0.341) may partly be a favourable draw. The prompt-noise spread was measured on zero-shot prompts only.
+- exp08 (the best score) and exp09 are on v3, the encoder on v4; v3 and v4 differed by ≤ 0.002 wherever both were run.
 - The setting was chosen step by step on val (7B, k = 0, few-shot), so the best val score is slightly optimistic; test is untouched.
 - The 7B runs are 4-bit, the smaller models fp16, so size and quantization are not fully separated.
 - Not done: an API backend and the generation fallback (no API budget); a larger model (~30B, task.md "Open"); the full 16-cell grid (does not fit the GPU budget on the 7B); shifting the `other`-vs-target balance with the saved scores; speaker information in the prompt (not in the shared Dataset).
@@ -40,7 +46,7 @@ Data: release **v4** (`data/v4_meetings`, val 16,188 segments), the same data as
 - Letters A–G plus descriptive names as answer options, never raw MRDA codes — each answer is one token, so it can be scored by log-probability.
 - `other` always defined in the prompt — it's the majority class; without a definition the model over-predicts the targets.
 - Unparseable answers fall back to `other`, with the failure rate recorded — `other` is not a target class, so the fallback adds no false positives to the primary metric.
-- Few-shot examples stratified (1–2 per class), from train only, with a fixed seed and a fixed order, the same in every cell — every class is shown, PROTOCOL §7, and one change per comparison. Retrieval of similar examples is a later experiment.
+- Few-shot examples stratified (1–3 per class), from train only, with a fixed seed and a fixed order, the same in every cell — every class is shown, PROTOCOL §7, and one change per comparison. Retrieval of similar examples is a later experiment.
 
 Implementation:
 - Main model `Qwen/Qwen2.5-0.5B-Instruct` — the instruct twin of C2's Qwen 0.5B, so prompted vs fine-tuned is compared on the same model.
@@ -58,7 +64,7 @@ Implementation:
 From the results:
 - All reported runs on data v4 — the encoder's data, so the numbers are comparable.
 - Larger models before any prompt grid (after exp01) — the 0.5B answers by letter, so a grid on it would measure its bias.
-- Contextual calibration dropped (exp02, exp03) — it helps only the 1.5B and lowers the 3B and 7B. Revisited with few-shot prompts and a train-frequency target in exp08.
+- Contextual calibration dropped (exp02, exp03) — it helps only the 1.5B and lowers the 3B and 7B. Rechecked with few-shot prompts in exp08: the uniform target lowers every run; a train-frequency target is within noise of the raw scores.
 - Experiments on the 7B, one factor at a time, instead of the 16-cell grid — a 7B val run takes 1.5–2 h, so the grid does not fit the GPU budget.
 - k = 0 for exp05–exp07 — k = 1 scores the same (exp04) with shorter, faster prompts.
 - A difference counts only if it exceeds the prompt-noise spread (~0.04, exp07).
@@ -79,4 +85,5 @@ Execution:
 | [exp05](experiments/exp05_few-shot-7b/NOTE.md) | Does one solved example per label help 7B (k = 0)? | v4: macro-F1 0.298 (zero-shot 0.207); `other` predicted 11,080 times (gold 13,543); `aa` / `ar` / `co` F1 up, `bk` down to 0.071 | yes: the only change clearly beyond prompt noise (+0.091); the short-reply confusion moves from `bk` to `aa`; one example draw only |
 | [exp06](experiments/exp06_no-definitions-7b/NOTE.md) | Do the label definitions help 7B, or are the names enough? | v4: macro-F1 0.217 vs 0.207 with definitions; without them `aa` F1 0.000, `cc` 0.043, `ar` 0.557 | no difference on average (within noise), but the definitions decide which classes the model uses; names only is 2.8 × faster |
 | [exp07](experiments/exp07_prompt-noise-7b/NOTE.md) | How much does rewording the instruction move the 7B score (prompt noise)? | v4: macro-F1 0.207 / 0.219 / 0.242 for three wordings; spread 0.036 | differences below ~0.04 are noise: few-shot is real, definitions off and context are not |
-| [exp08](experiments/exp08_calibration-order-7b/NOTE.md) | With examples in the prompt (exp05), does calibration (uniform or train-frequency target) help, and do the order and number of examples matter? (data v3, with its own v3 control) | pending | pending |
+| [exp08](experiments/exp08_calibration-order-7b/NOTE.md) | With examples in the prompt (exp05), does calibration (uniform or train-frequency target) help, and do the order and number of examples matter? (data v3, with its own v3 control) | v3: macro-F1 0.271 (control) / 0.214 (`cs` last) / 0.278 (shuffled) / **0.341** (2 per class); uniform calibration 0.174–0.284, train-frequency 0.227–0.335 | two examples per class is the best prompt (+0.070); order matters through the last example (−0.057 with `cs` last); calibration does not help in either form; the prefix cache cut a run from ~2 h to ~15 min |
+| [exp09](experiments/exp09_three-shots-7b/NOTE.md) | Do 3 examples per class beat exp08's 2, and how much does the draw of examples move the score (seeds 0 and 1)? (data v3) | v3: macro-F1 0.251 (seed 0) / 0.297 (seed 1) vs 0.341 with 2 per class; seed 0 predicts `cs` 7,558 times (gold 454), and "OK" goes all to `bk` in seed 0 and all to `other` in seed 1 | no gain from a third example; the draw of examples moves the score beyond noise (0.046 between seeds), so exp08's 0.341 is one draw; choose the examples instead of drawing them at random, or score more draws |
