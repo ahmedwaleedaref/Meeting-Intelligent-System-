@@ -16,6 +16,7 @@ from tests.prompting.test_shots import write_split
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 import calibrate_prompting  # noqa: E402
+import pride_prompting  # noqa: E402
 import trial_prompting  # noqa: E402
 
 
@@ -71,3 +72,21 @@ def test_prefix_cache_and_shot_order_reproduce_the_full_run_and_calibrate(tmp_pa
     assert metrics["prompting"]["prefix_cache"]["shared_tokens"] > 0
     for suffix in ("_cc", "_ccp"):
         load_predictions(tmp_path / "runs" / f"cached{suffix}" / "predictions.jsonl")
+
+
+def test_rotated_runs_give_pride_and_cyclic_predictions(tmp_path, model_available):
+    data_root = tmp_path / "data"
+    write_split(data_root / "val", n_meetings=1, per_label=1)
+    (data_root / "source.json").write_text(json.dumps({"data_version": "toy"}), encoding="utf-8")
+    runs = [str(tmp_path / "runs" / f"toy_r{shift}") for shift in range(7)]
+    for shift, run in enumerate(runs):
+        trial_prompting.main(["--data-root", str(data_root), "--out-dir", str(tmp_path / "runs"), "--run-name",
+                              f"toy_r{shift}", "--option-shift", str(shift), "--batch-size", "8"])
+
+    pride_prompting.main(["--data-root", str(data_root), "--name", str(tmp_path / "runs" / "toy"), "--run", *runs,
+                          "--share", "0.3", "--draws", "2"])
+
+    for suffix in ("_cyclic", "_pride0", "_pride1"):
+        assert len(load_predictions(tmp_path / "runs" / f"toy{suffix}" / "predictions.jsonl")) == len(LABELS)
+    prior = json.loads((tmp_path / "runs" / "toy_pride0" / "settings.json").read_text(encoding="utf-8"))["prior"]
+    assert list(prior) == ["A", "B", "C", "D", "E", "F", "G"] and sum(prior.values()) == pytest.approx(1.0)

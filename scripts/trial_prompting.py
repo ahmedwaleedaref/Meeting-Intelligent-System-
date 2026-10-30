@@ -15,6 +15,8 @@ usage (from the repo root) :
     PYTHONPATH=src python scripts/trial_prompting.py --data-root data/v3_meetings --run-name c3_exp01_k0_defs
     add --limit 50 for a quick check on the first 50 segments (metrics then cover those segments only)
     add --prefix-cache for few-shot runs : the tokens every prompt shares run once (same scores , much faster)
+    add --option-shift 1 .. 6 to rotate the options (PriDe , scripts/pride_prompting.py) ; scores.jsonl and the
+    predictions stay in LABELS order
 """
 
 import argparse
@@ -31,7 +33,7 @@ from smi.inputs.dataset import SegmentDataset
 from smi.labels import LABELS
 from smi.prompting.backend import (build_prefix_cache, common_prefix_len, compare_prefix_cache, load_model, score_batch,
                                    score_suffixes, tokenize_prompts)
-from smi.prompting.render import PROMPTS_DIR, load_prompt, render_prompt
+from smi.prompting.render import PROMPTS_DIR, load_prompt, render_prompt, to_label_order
 from smi.prompting.shots import SHOT_ORDERS, order_shots, pick_shots
 
 # --prefix-cache : how many of the longest prompts are checked against full prompts before scoring
@@ -55,6 +57,8 @@ def parse_args(argv=None):
     parser.add_argument("--shot-seed", type=int, default=0)
     parser.add_argument("--shot-order", default="labels", choices=SHOT_ORDERS, help="order of the few-shot examples")
     parser.add_argument("--shot-order-seed", type=int, default=0, help="seed of --shot-order shuffled")
+    parser.add_argument("--option-shift", type=int, default=0, choices=range(len(LABELS)),
+                        help="rotate the options by this many letters (PriDe) ; 0 = A is cs , ... , G is other")
     parser.add_argument("--prefix-cache", action="store_true",
                         help="run the tokens every prompt shares once (much faster with few-shot examples)")
     parser.add_argument("--batch-size", type=int, default=16)
@@ -163,7 +167,7 @@ def main(argv=None) -> None:
     prefix_info: dict = {}
     if todo:
         model, tokenizer, letter_ids = load_model(args.model, load_in_4bit=args.load_in_4bit)
-        prompts = {item["seg_id"]: render_prompt(item, template, options, shots) for item in todo}
+        prompts = {item["seg_id"]: render_prompt(item, template, options, shots, args.option_shift) for item in todo}
         if args.prefix_cache:
             batches = cached_prefix_batches(model, tokenizer, letter_ids, todo, prompts, args.batch_size, prefix_info)
         else:
@@ -172,7 +176,9 @@ def main(argv=None) -> None:
         with open(scores_path, "a", encoding="utf-8") as f:
             for i, (batch, results) in enumerate(batches):
                 for item, result in zip(batch, results):
-                    row = {"seg_id": item["seg_id"], "probs": result["probs"], "letter_mass": result["letter_mass"]}
+                    # the model's probabilities are per letter : with rotated options , reorder them to LABELS order
+                    probs = to_label_order(result["probs"], args.option_shift)
+                    row = {"seg_id": item["seg_id"], "probs": probs, "letter_mass": result["letter_mass"]}
                     f.write(json.dumps(row) + "\n")
                     done[item["seg_id"]] = row
                 f.flush()  # on disk now : survives a crash
