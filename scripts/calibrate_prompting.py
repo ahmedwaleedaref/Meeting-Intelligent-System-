@@ -56,6 +56,8 @@ def load_run(run: Path, data_root: Path, targets: list[str]) -> SourceRun:
         raise SystemExit(f"{run}: the run scored only part of the split (--limit) : calibrate a full run")
     if run_args.get("option_shift", 0) != 0:
         raise SystemExit(f"{run}: the options were rotated (--option-shift) : calibrate an unrotated run")
+    if run_args.get("shots_file") is not None:
+        raise SystemExit(f"{run}: each segment had its own examples (--shots-file) : no one content-free prompt to measure")
     for target in targets:
         if (run.parent / (run.name + TARGETS[target])).exists():
             raise SystemExit(f"{run.name}{TARGETS[target]} exists : run outputs are never overwritten")

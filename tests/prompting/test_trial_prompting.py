@@ -17,6 +17,7 @@ from tests.prompting.test_shots import write_split
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 import calibrate_prompting  # noqa: E402
 import pride_prompting  # noqa: E402
+import retrieve_shots  # noqa: E402
 import trial_prompting  # noqa: E402
 
 
@@ -90,3 +91,22 @@ def test_rotated_runs_give_pride_and_cyclic_predictions(tmp_path, model_availabl
         assert len(load_predictions(tmp_path / "runs" / f"toy{suffix}" / "predictions.jsonl")) == len(LABELS)
     prior = json.loads((tmp_path / "runs" / "toy_pride0" / "settings.json").read_text(encoding="utf-8"))["prior"]
     assert list(prior) == ["A", "B", "C", "D", "E", "F", "G"] and sum(prior.values()) == pytest.approx(1.0)
+
+
+def test_a_shots_file_gives_each_segment_its_own_examples(tmp_path, model_available):
+    data_root = tmp_path / "data"
+    write_split(data_root / "train", n_meetings=1, per_label=2)
+    write_split(data_root / "val", n_meetings=1, per_label=1)
+    (data_root / "source.json").write_text(json.dumps({"data_version": "toy"}), encoding="utf-8")
+    retrieve_shots.main(["--data-root", str(data_root), "--out", str(tmp_path / "shots"), "--select", "random",
+                         "--per-class", "1"])
+
+    trial_prompting.main(["--data-root", str(data_root), "--run-name", "toy", "--out-dir", str(tmp_path / "runs"),
+                          "--shots-file", str(tmp_path / "shots"), "--batch-size", "4"])
+
+    out = tmp_path / "runs" / "toy"
+    assert len(load_predictions(out / "predictions.jsonl")) == len(LABELS)
+    settings = json.loads((out / "settings.json").read_text(encoding="utf-8"))
+    assert settings["shots_file"]["settings"]["select"] == "random" and settings["shot_seg_ids"] == []
+    with pytest.raises(SystemExit, match="shots-file"):
+        calibrate_prompting.main(["--data-root", str(data_root), "--run", str(out)])

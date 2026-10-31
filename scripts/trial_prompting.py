@@ -17,6 +17,8 @@ usage (from the repo root) :
     add --prefix-cache for few-shot runs : the tokens every prompt shares run once (same scores , much faster)
     add --option-shift 1 .. 6 to rotate the options (PriDe , scripts/pride_prompting.py) ; scores.jsonl and the
     predictions stay in LABELS order
+    add --shots-file <folder> (scripts/retrieve_shots.py) to give each segment its own examples instead of
+    --shots-per-class's one set for every segment
 """
 
 import argparse
@@ -34,6 +36,7 @@ from smi.labels import LABELS
 from smi.prompting.backend import (build_prefix_cache, common_prefix_len, compare_prefix_cache, load_model, score_batch,
                                    score_suffixes, tokenize_prompts)
 from smi.prompting.render import PROMPTS_DIR, load_prompt, render_prompt, to_label_order
+from smi.prompting.retrieve import read_shots_file
 from smi.prompting.shots import SHOT_ORDERS, order_shots, pick_shots
 
 # --prefix-cache : how many of the longest prompts are checked against full prompts before scoring
@@ -59,6 +62,8 @@ def parse_args(argv=None):
     parser.add_argument("--shot-order-seed", type=int, default=0, help="seed of --shot-order shuffled")
     parser.add_argument("--option-shift", type=int, default=0, choices=range(len(LABELS)),
                         help="rotate the options by this many letters (PriDe) ; 0 = A is cs , ... , G is other")
+    parser.add_argument("--shots-file", default=None,
+                        help="each segment's own examples (scripts/retrieve_shots.py) , instead of --shots-per-class")
     parser.add_argument("--prefix-cache", action="store_true",
                         help="run the tokens every prompt shares once (much faster with few-shot examples)")
     parser.add_argument("--batch-size", type=int, default=16)
@@ -136,8 +141,21 @@ def main(argv=None) -> None:
         shots = pick_shots(data_root / "train", args.past_k, args.future_k, args.shots_per_class, args.shot_seed)
         shots = order_shots(shots, args.shot_order, args.shot_order_seed)
 
-    # ---- 2. settings.json : what this run is. a restarted run must have exactly the same settings
     source = json.loads((data_root / "source.json").read_text(encoding="utf-8"))
+    per_segment = None  # --shots-file : seg_id -> that segment's own examples
+    if args.shots_file is not None:
+        if args.shots_per_class > 0 or args.shot_order != "labels":
+            raise SystemExit("--shots-file gives each segment its own examples : leave out --shots-per-class and --shot-order")
+        try:
+            per_segment, shots_settings, shots_sha256 = read_shots_file(
+                Path(args.shots_file), data_root / "train", args.past_k, args.future_k, source["data_version"])
+        except ValueError as error:
+            raise SystemExit(str(error))
+        missing = [item["seg_id"] for item in items if item["seg_id"] not in per_segment]
+        if missing:
+            raise SystemExit(f"{args.shots_file}: no examples for {len(missing)} segments , e.g. {missing[:3]}")
+
+    # ---- 2. settings.json : what this run is. a restarted run must have exactly the same settings
     settings = {
         "args": vars(args),
         "data_version": source["data_version"],
@@ -145,6 +163,8 @@ def main(argv=None) -> None:
         "options_sha256": sha256_text(options),
         "shot_seg_ids": [shot["seg_id"] for shot in shots],
     }
+    if per_segment is not None:
+        settings["shots_file"] = {"sha256": shots_sha256, "settings": shots_settings}
     settings_path = out / "settings.json"
     if settings_path.exists():
         if json.loads(settings_path.read_text(encoding="utf-8")) != settings:
@@ -167,7 +187,9 @@ def main(argv=None) -> None:
     prefix_info: dict = {}
     if todo:
         model, tokenizer, letter_ids = load_model(args.model, load_in_4bit=args.load_in_4bit)
-        prompts = {item["seg_id"]: render_prompt(item, template, options, shots, args.option_shift) for item in todo}
+        prompts = {item["seg_id"]: render_prompt(item, template, options,
+                                                 shots if per_segment is None else per_segment[item["seg_id"]],
+                                                 args.option_shift) for item in todo}
         if args.prefix_cache:
             batches = cached_prefix_batches(model, tokenizer, letter_ids, todo, prompts, args.batch_size, prefix_info)
         else:
