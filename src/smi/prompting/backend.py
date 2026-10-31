@@ -148,8 +148,11 @@ def score_suffixes(model, letter_ids: list[int], prefix_cache, prefix_len: int, 
 # check : in fp16 , any change in how a prompt is batched moves its probabilities a little (exp08's first 7B try :
 # up to 0.08 between cached and padded batches). the cache passes if it stays within CHECK_FACTOR times the
 # padded batch's own difference , plus CHECK_FLOOR ; a wrong mask or position moves scores far more.
+# CHECK_FLOOR is the fp16 noise allowed even when the padded batch matches the prompts alone (no padding needed) :
+# exp10 , cached 0.024 against padded 0.0001 failed at 0.01 , while two whole 7B runs with different batching
+# differ by more than 0.024 on 3,201 of 16,289 segments (99th percentile 0.078)
 CHECK_FACTOR = 3.0
-CHECK_FLOOR = 0.01
+CHECK_FLOOR = 0.05
 
 
 def compare_prefix_cache(model, tokenizer, letter_ids: list[int], prompts: list[str], prefix_len: int) -> dict[str, float]:
