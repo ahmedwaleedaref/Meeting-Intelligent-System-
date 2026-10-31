@@ -13,6 +13,7 @@ from smi.prompting.retrieve import (embed, example_pool, nearest_per_class, rand
 from tests.prompting.test_shots import write_split
 
 TWO_PER_CLASS = [c for c in range(len(LABELS)) for _ in range(2)]
+DEVICES = ["cpu", pytest.param("cuda", marks=pytest.mark.skipif(not torch.cuda.is_available(), reason="no GPU"))]
 
 
 def unit(rows):
@@ -29,8 +30,10 @@ def toward_query(far_first: bool):
     return unit(rows)
 
 
-def test_nearest_per_class_gives_each_class_closest_first_in_label_order():
-    rows, sims = nearest_per_class(unit([[0.0] * 7 + [1.0]]), toward_query(far_first=True), TWO_PER_CLASS, per_class=2)
+@pytest.mark.parametrize("device", DEVICES)
+def test_nearest_per_class_gives_each_class_closest_first_in_label_order(device):
+    query, pool = unit([[0.0] * 7 + [1.0]]).to(device), toward_query(far_first=True).to(device)
+    rows, sims = nearest_per_class(query, pool, TWO_PER_CLASS, per_class=2)
     assert rows == [[r for c in range(len(LABELS)) for r in (2 * c + 1, 2 * c)]]
     assert all(sims[0][2 * c] > sims[0][2 * c + 1] for c in range(len(LABELS)))
 

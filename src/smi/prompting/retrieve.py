@@ -80,7 +80,7 @@ def nearest_per_class(queries: torch.Tensor, pool: torch.Tensor, pool_labels: li
             within a class , and their cosine similarities
     raises ValueError if a class has fewer than per_class rows in the pool
     """
-    labels = torch.tensor(pool_labels)
+    labels = torch.tensor(pool_labels, device=pool.device)  # on the pool's device : topk's positions index these rows
     by_class = [torch.nonzero(labels == c).flatten() for c in range(len(LABELS))]
     for label, rows in zip(LABELS, by_class):
         if len(rows) < per_class:
@@ -92,9 +92,9 @@ def nearest_per_class(queries: torch.Tensor, pool: torch.Tensor, pool_labels: li
         block = queries[start : start + chunk] @ pool.T  # [chunk, m] cosines
         for rows in by_class:  # in LABELS order , so each query's list comes out class by class
             values, positions = block[:, rows].topk(per_class, dim=1)
-            for i in range(len(values)):
-                picked[start + i].extend(rows[positions[i]].tolist())
-                similarity[start + i].extend(values[i].tolist())
+            for i, (chosen, cosines) in enumerate(zip(rows[positions].tolist(), values.tolist())):
+                picked[start + i].extend(chosen)
+                similarity[start + i].extend(cosines)
     return picked, similarity
 
 
