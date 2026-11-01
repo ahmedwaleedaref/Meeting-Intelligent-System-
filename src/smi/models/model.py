@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
+    BitsAndBytesConfig,
     PreTrainedModel,
     PreTrainedTokenizerBase,
     get_scheduler,
@@ -21,6 +22,10 @@ from smi.labels import LABELS, TARGET_LABELS
 def load_model_and_tokenizer(
     name_or_path: str | Path,
     labels: tuple[str, ...] = LABELS,
+    dtype: torch.dtype = torch.float32,
+    lora: dict | None = None,
+    load_in_4bit: bool = False,
+    gradient_checkpointing: bool = False,
 ) -> tuple[PreTrainedModel, PreTrainedTokenizerBase]:
     """
     load a pretrained checkpoint as a sequence classifier over `labels` , and its tokenizer.
@@ -28,28 +33,117 @@ def load_model_and_tokenizer(
                    or a local folder with config + tokenizer files + weights (e.g. an attached Kaggle dataset)
     labels       : the classes of the head , in order ; class i of the model = labels[i]
                    (default : the 7 LABELS , the same index the dataset uses ; the hierarchical stages use others)
+    dtype        : torch.float32 (default) for everything that trains ; torch.float16 only for a frozen base under
+                   LoRA (halves its memory ; then train and predict must run with fp16=True)
+    lora         : None (default) = full fine-tuning , every parameter trains. A dict = LoRA , only the adapters and
+                   the head train : {"r" , "alpha" , "dropout" , "target_modules"} (a list of names , or "all-linear")
+    load_in_4bit : frozen base in 4-bit NF4 (QLoRA) , compute in fp16 ; needs lora and the bitsandbytes package
+    gradient_checkpointing : recompute each layer's activations in backward : less memory , ~1/3 more time per step
 
     model and tokenizer come from the same name_or_path , so they can never mismatch.
     the classification head is new and randomly initialised (HF warns about it : expected).
-    weights are loaded in fp32 : transformers 5 defaults to dtype="auto" (the checkpoint's own dtype ,
-    fp16 for some checkpoints).
-    encoder only for now : a decoder also needs a pad token set on both tokenizer and model (open , Part 5).
+    weights are loaded in fp32 by default : transformers 5 defaults to dtype="auto" (the checkpoint's own dtype ,
+    fp16 for some checkpoints , bf16 for Qwen , which a T4 cannot compute in).
+    the model always gets the tokenizer's pad id : a decoder's head reads the rightmost token that is not
+    config.pad_token_id , so the two must agree (the encoder reads [CLS] and never uses it ; DESIGN.md Part 5).
+    the order matters : checkpointing before the LoRA wrapper , and the fp32 cast after it , because the
+    wrapper creates the head's trainable copy (and leaves it in the base dtype).
+    raises ValueError on load_in_4bit without lora , or if check_trainable_dtypes fails
     """
+    if load_in_4bit and lora is None:
+        raise ValueError("load_in_4bit needs lora : 4-bit weights cannot be trained")
+
     id2label = {}
     label2id = {}
     for i in range(len(labels)):
         id2label[i] = labels[i]
         label2id[labels[i]] = i
 
+    quantization_config = None
+    if load_in_4bit:
+        # fp16 compute dtype : the T4 has no bf16
+        quantization_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_compute_dtype=torch.float16,
+        )
+
     tokenizer = AutoTokenizer.from_pretrained(name_or_path)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
     model = AutoModelForSequenceClassification.from_pretrained(
         name_or_path,
         num_labels=len(labels),
         id2label=id2label,
         label2id=label2id,
-        dtype=torch.float32,
+        dtype=dtype,
+        quantization_config=quantization_config,
     )
+    # always the tokenizer's pad id , never eos_token_id : the two differ for Qwen2.5-Instruct and Qwen3
+    model.config.pad_token_id = tokenizer.pad_token_id
+
+    # same gradients as without (checked locally , dropout included) ; only active in training mode
+    if gradient_checkpointing:
+        model.gradient_checkpointing_enable()
+
+    if lora is not None:
+        # imported here : the encoder path must keep working where peft is not installed
+        from peft import LoraConfig, get_peft_model
+
+        # task_type SEQ_CLS adds the head to modules_to_save , so it trains and is saved with the adapters
+        lora_config = LoraConfig(
+            task_type="SEQ_CLS",
+            r=lora["r"],
+            lora_alpha=lora["alpha"],
+            lora_dropout=lora["dropout"],
+            target_modules=lora["target_modules"],
+        )
+        model = get_peft_model(model, lora_config)
+
+        # GradScaler refuses fp16 gradients , and PEFT upcasts the adapters but not the head
+        for parameter in model.parameters():
+            if parameter.requires_grad:
+                parameter.data = parameter.data.float()
+        check_trainable_dtypes(model, None if load_in_4bit else dtype)
+
     return model, tokenizer
+
+
+def check_trainable_dtypes(model: PreTrainedModel, base_dtype: torch.dtype | None) -> None:
+    """
+    turns a dtype mistake into an immediate error instead of a failure (or silent damage) during training.
+    base_dtype : the dtype of the frozen parameters ; None = do not check them (a 4-bit base mixes dtypes)
+    raises ValueError if a trainable parameter is not fp32 , a frozen one is not base_dtype ,
+           or no parameter of the classification head trains (it would stay random)
+    """
+    head_trains = False
+    for name, parameter in model.named_parameters():
+        if parameter.requires_grad:
+            if parameter.dtype != torch.float32:
+                raise ValueError(f"trainable parameter {name} is {parameter.dtype}, expected torch.float32")
+            if "score" in name or "classifier" in name:
+                head_trains = True
+        elif base_dtype is not None and parameter.dtype != base_dtype:
+            raise ValueError(f"frozen parameter {name} is {parameter.dtype}, expected {base_dtype}")
+    if not head_trains:
+        raise ValueError("the classification head is frozen : it would stay random")
+
+
+def count_parameters(model: PreTrainedModel) -> tuple[int, int]:
+    """
+    returns (trainable parameters , parameters of the model).
+    what LoRA adds (the adapters , and the head's trainable copy) is left out of the second number :
+    "the fraction of the model that trains" should not depend on what the wrapper added to it.
+    """
+    trainable = 0
+    total = 0
+    for name, parameter in model.named_parameters():
+        if parameter.requires_grad:
+            trainable = trainable + parameter.numel()
+        if "lora_" not in name and "modules_to_save" not in name:
+            total = total + parameter.numel()
+    return trainable, total
 
 
 def predict(
@@ -191,7 +285,7 @@ def build_optimizer(model: PreTrainedModel, lr: float, weight_decay: float, fuse
     - 1-D parameters (biases , LayerNorm / RMSNorm weights) : no weight decay
     the split is by shape , not by name , so it works for every architecture (encoder and decoder norms are named differently).
     betas and eps are PyTorch's defaults.
-    frozen parameters (requires_grad False , e.g. the base model under LoRA later) are left out.
+    frozen parameters (requires_grad False , e.g. the base model under LoRA) are left out.
     fused : False (default) = PyTorch's default implementation (one pass over all parameters per line of the update) ;
             True = fused AdamW , the same update in a few large kernels (measured on a T4 : 63.5 -> 24.0 ms per step ,
             concepts/performance-analysis-and-optimization/05). Needs the parameters on the GPU already ,
