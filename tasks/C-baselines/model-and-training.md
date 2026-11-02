@@ -12,7 +12,7 @@ train(model, loaders, optimizer, scheduler) ──► best epoch , its val predi
 
 ---
 
-## 1. `load_model_and_tokenizer(name_or_path, labels=LABELS)`
+## 1. `load_model_and_tokenizer(name_or_path, labels=LABELS, dtype=torch.float32, lora=None, load_in_4bit=False, gradient_checkpointing=False)`
 
 **Job:** load a pretrained checkpoint as a classifier over `labels`, together with its own tokenizer.
 
@@ -27,8 +27,15 @@ train(model, loaders, optimizer, scheduler) ──► best epoch , its val predi
 **Logic:**
 1. **Build `id2label` and `label2id` from `labels`,** so class `i` of the model is `labels[i]`. With the default 7 `LABELS`, that's the same index the Dataset uses, so the two can't disagree.
 2. **Load the tokenizer** from `name_or_path`.
-3. **Load the model** from the **same** `name_or_path`, so model and tokenizer can never mismatch, with **`dtype=torch.float32` passed explicitly.**
-4. **Return** `(model, tokenizer)`.
+3. **Load the model** from the **same** `name_or_path`, so model and tokenizer can never mismatch, with **`dtype` passed explicitly** (fp32 by default).
+4. **Copy the tokenizer's pad id to `model.config`.** A decoder's head needs it (DESIGN.md Part 5). DeBERTa's head never reads it, and its value is already 0, so the encoder is unaffected.
+5. **`gradient_checkpointing=True`:** turn it on, before any wrapping.
+6. **`lora` given:** wrap with PEFT, cast every trainable parameter to fp32, and check the dtypes with `check_trainable_dtypes`. PEFT upcasts the adapters but leaves the head's trainable copy in the base's dtype, and `GradScaler` refuses fp16 gradients.
+7. **Return** `(model, tokenizer)`.
+
+With every option at its default, steps 5 and 6 do nothing and `peft` is never imported: checked byte for byte against the code before these options (predictions, metrics and history, flat and hierarchical), on tiny models on CPU; `notebooks/kaggle_c2_default_path_check.ipynb` does the same on a T4.
+
+**`count_parameters(model)`** returns the trainable count and the size of the model, without what the wrapper added. `trial_run.py` prints both and writes them to `parameters.json`.
 
 **Why `dtype` is explicit:** `transformers` 5 defaults to `dtype="auto"`, meaning "load in the precision the checkpoint was stored in". DeBERTa-v3's checkpoint is stored in fp16, so without this the model would load in fp16, and training with fp16 master weights loses small updates. fp16 is applied only during computation, by `train(fp16=True)`.
 
