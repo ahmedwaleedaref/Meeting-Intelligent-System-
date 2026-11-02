@@ -1,24 +1,32 @@
 """
-TEMPORARY trial of the encoder pipeline (not the PROTOCOL run.py : its numbers are not reportable).
+TEMPORARY trial of the phase-C pipeline (not the PROTOCOL run.py : its numbers are not reportable).
 
 --mode flat         : one 7-class classifier
 --mode hierarchical : stage 1 ("other" vs "not_other") + stage 2 (the 6 target classes , trained on non-"other"
                       segments) , combined into one 7-class prediction (smi.models.hierarchical.combine)
 
+--family encoder (default) : full fine-tuning , exactly as without the flag
+--family decoder           : DECODER_SETTINGS below : suffix , LoRA , frozen base in fp16 (task C2)
+                             --full-finetuning trains every parameter instead (fp32 base)
+
 for each seed : train -> write the best epoch's val predictions -> evaluate (7 classes , the harness) ->
-one folder per seed with settings.json , history.jsonl (per stage) , predictions.jsonl , metrics.json.
+one folder per seed with settings.json , history.jsonl and parameters.json (per stage) , predictions.jsonl ,
+metrics.json.
 
 one process , one device (the GPU if there is one). fp16 and fused AdamW are settings below
 (measured one at a time on a T4 in concepts/performance-analysis-and-optimization/05).
 
 usage (from the repo root) :
     PYTHONPATH=src python scripts/trial_run.py --mode flat --data-root data/v4_meetings --model microsoft/deberta-v3-base --out-dir runs
+    PYTHONPATH=src python scripts/trial_run.py --mode flat --family decoder --lr 2e-4 --epochs 3 --data-root data/v4_meetings --model Qwen/Qwen2.5-0.5B --out-dir runs
 """
 
 import argparse
+import importlib.metadata
 import json
 import math
 import statistics
+import subprocess
 import time
 from pathlib import Path
 
@@ -31,7 +39,14 @@ from smi.eval.prediction_schema import write_predictions
 from smi.inputs.loader import build_dataloader
 from smi.labels import LABELS, TARGET_LABELS
 from smi.models import hierarchical
-from smi.models.model import build_optimizer, build_scheduler, classification_report, load_model_and_tokenizer, train
+from smi.models.model import (
+    build_optimizer,
+    build_scheduler,
+    classification_report,
+    count_parameters,
+    load_model_and_tokenizer,
+    train,
+)
 
 SETTINGS = {
     "past_k": 0,
@@ -50,7 +65,51 @@ SETTINGS = {
     "log_every": 50,
     "fp16": True,             # mixed precision (GPU only) ; False = fp32 , the pre-optimization setup
     "fused_optimizer": True,  # fused AdamW ; False = PyTorch's default implementation
+    "grad_checkpointing": False,  # True = recompute each layer's activations in backward : less memory , ~1/3 more time
+    "family": "encoder",      # "encoder" or "decoder" (DECODER_SETTINGS)
+    "suffix": "",             # text glued after the last segment ; decoder only
+    "base_dtype": "fp32",     # dtype of the loaded weights ; "fp16" only for a frozen base under LoRA
+    "load_in_4bit": False,    # frozen base in 4-bit (QLoRA) , when fp16 does not fit
+    "lora": None,             # None = full fine-tuning
 }
+
+# what --family decoder changes. the suffix wording and the LoRA settings stay fixed across decoder runs and sizes
+DECODER_SETTINGS = {
+    "family": "decoder",
+    "suffix": "\nLabel of [T]:",
+    "base_dtype": "fp16",
+    "lora": {"r": 16, "alpha": 32, "dropout": 0.05, "target_modules": ["q_proj", "k_proj", "v_proj", "o_proj"]},
+}
+
+DTYPES = {"fp32": torch.float32, "fp16": torch.float16}
+
+
+def load_model(model_name: str, labels: tuple[str, ...] = LABELS):
+    """load_model_and_tokenizer as SETTINGS say ; the notebooks' memory check uses it too."""
+    return load_model_and_tokenizer(
+        model_name, labels,
+        dtype=DTYPES[SETTINGS["base_dtype"]],
+        lora=SETTINGS["lora"],
+        load_in_4bit=SETTINGS["load_in_4bit"],
+        gradient_checkpointing=SETTINGS["grad_checkpointing"],
+    )
+
+
+def run_environment() -> dict:
+    """the commit and library versions of this run (Kaggle keeps its own torch build , so they are not all pinned)."""
+    try:
+        commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=Path(__file__).parent,
+                                capture_output=True, text=True).stdout.strip()
+    except FileNotFoundError:  # no git on this machine
+        commit = ""
+
+    versions = {}
+    for package in ("torch", "transformers", "peft"):
+        try:
+            versions[package] = importlib.metadata.version(package)
+        except importlib.metadata.PackageNotFoundError:  # peft : the encoder runs without it
+            versions[package] = None
+    return {"commit": commit, "versions": versions}
 
 
 def run_stage(
@@ -65,9 +124,10 @@ def run_stage(
     val_gold: dict[str, str],
 ) -> tuple[int, dict[str, dict]]:
     """train one classifier ; returns (selected epoch , its val records)."""
-    # one seed for everything random : head initialisation , dropout and the train batches
+    # one seed for everything random : head initialisation , LoRA's A matrices , dropout and the train batches
     set_seed(seed)
-    model, tokenizer = load_model_and_tokenizer(model_name, labels)
+    model, tokenizer = load_model(model_name, labels)
+    trainable, total = count_parameters(model)
     # on its device before the optimizer is built : fused AdamW needs the parameters on the GPU
     model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
 
@@ -79,6 +139,7 @@ def run_stage(
         "max_length": SETTINGS["max_length"],
         "separator": SETTINGS["separator"],
         "markers": tuple(SETTINGS["markers"]),
+        "suffix": SETTINGS["suffix"],
     }
     train_loader = build_dataloader(
         data_root / "train", batch_size=SETTINGS["batch_size"], shuffle=True, seed=seed,
@@ -94,11 +155,17 @@ def run_stage(
 
     total_steps = SETTINGS["epochs"] * math.ceil(len(train_loader) / SETTINGS["grad_accum_steps"])
     print(f"[{stage_dir.name}] seed {seed}: {len(train_loader)} train batches per epoch , "
-          f"{total_steps} optimizer steps | fp16 {SETTINGS['fp16']} | fused AdamW {SETTINGS['fused_optimizer']}",
+          f"{total_steps} optimizer steps | fp16 {SETTINGS['fp16']} | fused AdamW {SETTINGS['fused_optimizer']} | "
+          f"grad checkpointing {SETTINGS['grad_checkpointing']}\n"
+          f"  family {SETTINGS['family']} | base {SETTINGS['base_dtype']} | lora {SETTINGS['lora']} | "
+          f"trainable parameters {trainable:,} of {total:,} ({100 * trainable / total:.2f} %)",
           flush=True)
 
-    # every history line is printed and appended to history.jsonl as soon as train creates it
     stage_dir.mkdir(parents=True)
+    with open(stage_dir / "parameters.json", "x", encoding="utf-8") as f:
+        json.dump({"trainable": trainable, "total": total, "fraction": trainable / total}, f, indent=2)
+
+    # every history line is printed and appended to history.jsonl as soon as train creates it
     history_file = open(stage_dir / "history.jsonl", "x", encoding="utf-8")
 
     def on_log(line: dict) -> None:
@@ -124,8 +191,8 @@ def run_stage(
     finally:
         history_file.close()
 
-    print(f"[{stage_dir.name}] selected epoch {selected_epoch} , truncated train inputs = {collator.n_truncated}",
-          flush=True)
+    print(f"[{stage_dir.name}] selected epoch {selected_epoch} , truncated train inputs = {collator.n_truncated} , "
+          f"truncated val inputs = {val_loader.collate_fn.n_truncated}", flush=True)
 
     # free the GPU before the next model
     del model, optimizer, scheduler, train_loader
@@ -137,7 +204,8 @@ def run_one_seed(mode: str, seed: int, data_root: Path, model_name: str, run_dir
     """returns the metrics dict (metrics.json)."""
     run_dir.mkdir(parents=True)  # fails if the folder already exists : a run is never overwritten
     with open(run_dir / "settings.json", "x", encoding="utf-8") as f:
-        json.dump({"mode": mode, "seed": seed, "model": model_name, "data_root": str(data_root), **SETTINGS}, f, indent=2)
+        json.dump({"mode": mode, "seed": seed, "model": model_name, "data_root": str(data_root), **SETTINGS,
+                   **run_environment()}, f, indent=2)
 
     gold = load_gold(data_root / "val")
     if mode == "flat":
@@ -188,7 +256,8 @@ def run_one_seed(mode: str, seed: int, data_root: Path, model_name: str, run_dir
     return metrics
 
 
-def main() -> None:
+def parse_arguments() -> argparse.Namespace:
+    """the command line ; the notebooks' memory check takes the same flags as the run it checks."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=["flat", "hierarchical"], required=True)
     parser.add_argument("--data-root", required=True, help="folder with train/ val/ and source.json")
@@ -196,18 +265,75 @@ def main() -> None:
     parser.add_argument("--out-dir", required=True, help="where the per-seed run folders are created")
     parser.add_argument("--seeds", type=int, nargs="+", default=[42, 43, 44])
     parser.add_argument("--name", default=None, help="prefix of the run folders (default: trial_<mode>_k0)")
-    parser.add_argument("--epochs", type=int, default=None, help="override SETTINGS['epochs'] (smoke tests)")
-    parser.add_argument("--lr", type=float, default=None, help="override SETTINGS['lr'] (smoke tests)")
+    parser.add_argument("--epochs", type=int, default=None, help="override SETTINGS['epochs']")
+    parser.add_argument("--lr", type=float, default=None, help="override SETTINGS['lr']")
+    parser.add_argument("--past-k", type=int, default=None, help="override SETTINGS['past_k'] (context segments before)")
+    parser.add_argument("--future-k", type=int, default=None, help="override SETTINGS['future_k'] (context segments after)")
+    parser.add_argument("--grad-checkpointing", action="store_true",
+                        help="recompute activations in backward : for inputs too long for the GPU's memory at this batch size")
     parser.add_argument("--fp32", action="store_true",
                         help="fp16 and fused AdamW off : the pre-optimization setup (e.g. to reproduce the first seed-42 run)")
-    args = parser.parse_args()
+    parser.add_argument("--family", choices=["encoder", "decoder"], default="encoder",
+                        help="decoder = DECODER_SETTINGS : suffix , LoRA , frozen base in fp16")
+    parser.add_argument("--full-finetuning", action="store_true",
+                        help="decoder without LoRA : every parameter trains , base in fp32 (the control of task C2)")
+    parser.add_argument("--base-dtype", choices=sorted(DTYPES), default=None, help="override SETTINGS['base_dtype']")
+    parser.add_argument("--load-in-4bit", action="store_true", help="frozen base in 4-bit (QLoRA) : needs LoRA and bitsandbytes")
+    parser.add_argument("--lora-r", type=int, default=None, help="override the LoRA rank")
+    parser.add_argument("--lora-alpha", type=int, default=None, help="override LoRA's alpha ; report it with r and the LR")
+    parser.add_argument("--lora-targets", nargs="+", default=None,
+                        help="override the LoRA target modules : module names , or the one word all-linear")
+    return parser.parse_args()
+
+
+def apply_arguments(args: argparse.Namespace) -> None:
+    """write the command line into SETTINGS ; invalid combinations stop here , not after a wrong run."""
     if args.epochs is not None:
         SETTINGS["epochs"] = args.epochs
     if args.lr is not None:
         SETTINGS["lr"] = args.lr
+    if args.past_k is not None:
+        SETTINGS["past_k"] = args.past_k
+    if args.future_k is not None:
+        SETTINGS["future_k"] = args.future_k
+    if args.grad_checkpointing:
+        SETTINGS["grad_checkpointing"] = True
     if args.fp32:
         SETTINGS["fp16"] = False
         SETTINGS["fused_optimizer"] = False
+
+    if args.family == "decoder":
+        SETTINGS.update(DECODER_SETTINGS)
+    if args.full_finetuning:
+        if args.family != "decoder":
+            raise ValueError("--full-finetuning needs --family decoder : the encoder always trains fully")
+        SETTINGS["lora"] = None
+        SETTINGS["base_dtype"] = "fp32"
+    if args.base_dtype is not None:
+        SETTINGS["base_dtype"] = args.base_dtype
+    if args.load_in_4bit:
+        SETTINGS["load_in_4bit"] = True
+
+    # "all-linear" is a PEFT keyword : a plain string , not a list of module names
+    targets = args.lora_targets
+    if targets == ["all-linear"]:
+        targets = "all-linear"
+    lora_overrides = {"r": args.lora_r, "alpha": args.lora_alpha, "target_modules": targets}
+    for key in lora_overrides:
+        if lora_overrides[key] is not None:
+            if SETTINGS["lora"] is None:
+                raise ValueError("the --lora-* flags need LoRA : --family decoder , without --full-finetuning")
+            SETTINGS["lora"] = {**SETTINGS["lora"], key: lora_overrides[key]}
+
+    if SETTINGS["base_dtype"] == "fp16" and SETTINGS["lora"] is None:
+        raise ValueError("an fp16 base cannot train : every trained weight must be fp32 , so it needs LoRA")
+    if (SETTINGS["base_dtype"] == "fp16" or SETTINGS["load_in_4bit"]) and not SETTINGS["fp16"]:
+        raise ValueError("an fp16 or 4-bit base needs fp16 autocast : the forward fails without it (drop --fp32)")
+
+
+def main() -> None:
+    args = parse_arguments()
+    apply_arguments(args)
     name = args.name if args.name is not None else f"trial_{args.mode}_k0"
 
     data_root = Path(args.data_root)

@@ -13,7 +13,7 @@ The answers to the questions in [design-task.md](design-task.md), as designed an
 | 2 Model input | Built for fine-tuned models; prompt rendering designed |
 | 3 Model abstraction | Functions built; registry and family interface designed |
 | 4 Training | Built, except checkpoints and resume |
-| 5 Decoder | Designed |
+| 5 Decoder | Built |
 | 6 Prompting | Designed (API budget open) |
 | 7 Config system | Open |
 | 8 Orchestration | `evaluate()` built; `run.py` open (a temporary `scripts/trial_run.py` exists) |
@@ -135,7 +135,8 @@ build_dataloader(split_dir, tokenizer, past_k, future_k, batch_size, chunk_batch
 
 **Built so far:** the encoder side as functions, not yet as a family class or a registry. `scripts/trial_run.py` wires them together:
 ```python
-load_model_and_tokenizer(name_or_path, labels=LABELS) -> (model, tokenizer)   # weights loaded in fp32
+load_model_and_tokenizer(name_or_path, labels=LABELS, dtype=torch.float32, lora=None, load_in_4bit=False,
+                         gradient_checkpointing=False) -> (model, tokenizer)   # defaults = the encoder path
 predict(model, dataloader, labels=LABELS, fp16=False) -> {seg_id: {"label", "scores"}}
 train(model, train_loader, val_loader, val_gold, optimizer, scheduler, epochs, grad_accum_steps,
       max_grad_norm, log_every, labels=LABELS, select_labels=TARGET_LABELS, label_map=None,
@@ -192,7 +193,7 @@ Both default to `False`, and the default path reproduces the earlier fp32 runs b
 
 ---
 
-## Part 5: Decoder + classification head. **Designed**
+## Part 5: Decoder + classification head. **Built** (`src/smi/models/model.py`, `scripts/trial_run.py`)
 
 **One label per input:** `AutoModelForSequenceClassification` on a decoder (Qwen family) replaces the language-model head with a new 7-class `score` head on the **last real token**. Causal attention means only that token has seen the whole input.
 
@@ -235,16 +236,18 @@ train:
 ```
 
 **Truncation must never cut the suffix:** its last token is the one the head reads. The Collator currently truncates from the **end**, which is exactly where the suffix is. At k ≤ 5 nothing is truncated (Part 2), but for decoder runs:
-- stop or warn if the Collator's `n_truncated > 0`;
+- **built:** a Collator with a suffix raises the moment an input would be cut, in the train and val loaders alike;
 - before using long contexts, implement Part 2's segment-dropping rule, or set the decoder tokenizer's `truncation_side = "left"` as an interim measure.
 
 The decoder can also use a larger `max_length` (e.g. 1024).
 
-**Open:** the suffix wording; the model list and sizes; the LoRA defaults (set in the first decoder experiment, then fixed).
+**Decided in C2 exp01:** LoRA r = 16, α = 32, dropout 0.05 on the attention projections, the same suffix wording, for every decoder run.
 
-**What the existing code already provides:** the Collator's `suffix`, label maps, shape-based weight decay, and skipping frozen parameters in the optimizer.
+**Open:** the model list and sizes; whether a different suffix wording helps.
 
-**What remains to write:** setting the pad token on tokenizer and model, the LoRA wrapper, optional 4-bit loading, and the pooling test.
+**What the existing code already provided:** the Collator's `suffix`, label maps, shape-based weight decay, and skipping frozen parameters in the optimizer. `train` and `predict` needed no change.
+
+**What was added:** the pad id on tokenizer and model, the LoRA wrapper with the fp32 cast and `check_trainable_dtypes`, optional 4-bit loading and gradient checkpointing, all as `load_model_and_tokenizer` options whose defaults keep the encoder path; `--family decoder` and its flags in `trial_run.py`; the tests in `tests/models/test_decoder.py`. `peft` is imported only when LoRA is used, so the encoder runs without it. 4-bit loading has not been run yet: 0.5B doesn't need it.
 
 ---
 

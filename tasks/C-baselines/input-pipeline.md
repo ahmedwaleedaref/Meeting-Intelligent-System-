@@ -124,7 +124,7 @@ For the decoder, `"\nLabel of [T]:"` would follow as a last line. An empty `left
    - `return_token_type_ids=False`: one sequence per input, so they would carry no information;
    - `return_tensors="pt"`.
    The tokenizer adds the model's special tokens itself (`[CLS]`, `[SEP]` for DeBERTa).
-3. **Count truncations.** An input can only have been cut if it now fills `max_length` exactly; only those are tokenized again without truncation to check. `n_truncated` and `n_items` are updated.
+3. **Count truncations.** An input can only have been cut if it now fills `max_length` exactly; only those are tokenized again without truncation to check. `n_truncated` and `n_items` are updated. **With a suffix this is an error:** the cut removes the suffix first, and the decoder's head reads its last token.
 4. **Labels:** one per item (sequence classification: one class for the whole input), as a `[B]` tensor. Test items (`label=None`) get `-100`, which PyTorch's cross-entropy ignores.
 5. **Return:**
    - `input_ids` `[B, L]`;

@@ -32,7 +32,7 @@ flowchart LR
 |----|------|-------|--------|
 | [B](tasks/B-eval-harness/README.md) | Evaluation harness | Ahmed | in progress |
 | [C1](tasks/C1-encoder-baseline/README.md) | Encoder baseline (DeBERTa) and hierarchical variant | Ahmed | in progress |
-| [C2](tasks/C2-decoder-baseline/README.md) | Decoder + classification head baseline (Qwen, LoRA) | TBD | not started |
+| [C2](tasks/C2-decoder-baseline/README.md) | Decoder + classification head baseline (Qwen, LoRA) | TBD | in progress |
 | [C3](tasks/C3-prompting-baseline/README.md) | Prompting baseline | TBD | not started |
 
 ## Setup

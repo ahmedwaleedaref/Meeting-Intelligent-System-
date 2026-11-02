@@ -25,7 +25,7 @@ class SegmentCollator:
     """
     turns a list of SegmentItem (one batch from the sampler) into one CollatorBatch.
     model-dependent only through the tokenizer it is given ; no family branches :
-    a decoder later = the same class with a suffix and a tokenizer whose pad token is set.
+    a decoder = the same class with a suffix and a tokenizer whose pad token is set.
     rule : items are read-only , never modified here (they are stored in the dataset).
     """
 
@@ -85,6 +85,8 @@ class SegmentCollator:
         token_type_ids are dropped.
         labels : one per item (sequence classification) ; -100 for label None.
         updates n_items and n_truncated.
+        raises ValueError if an input is cut while a suffix is set : the cut removes the suffix first ,
+        and a decoder's head reads its last token (DESIGN.md Part 5)
         """
         texts = []
         for item in items:
@@ -107,6 +109,9 @@ class SegmentCollator:
                 full_ids = self.tokenizer(texts[i])["input_ids"]
                 if len(full_ids) > self.max_length:
                     self.n_truncated = self.n_truncated + 1
+                    if self.suffix != "":
+                        raise ValueError(f"seg_id {items[i]['seg_id']!r}: input has {len(full_ids)} tokens, "
+                                         f"max_length {self.max_length} would cut the suffix")
         self.n_items = self.n_items + len(texts)
 
         labels = []
