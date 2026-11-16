@@ -1,0 +1,7 @@
+A) suggestion
+B) command
+C) accept
+D) acknowledgement
+E) reject
+F) commitment
+G) other

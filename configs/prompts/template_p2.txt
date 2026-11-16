@@ -1,0 +1,9 @@
+Read this extract from a recorded research meeting, then label the dialogue act of the segment enclosed in [T] ... [/T].
+
+Possible labels:
+{options}
+{examples}
+Meeting extract:
+{transcript}
+
+Give only the letter of the correct label.

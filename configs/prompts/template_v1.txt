@@ -1,0 +1,9 @@
+Below is part of a transcript of a research meeting. Classify the dialogue act of the segment marked [T] ... [/T].
+
+Options:
+{options}
+{examples}
+Transcript:
+{transcript}
+
+Answer with the letter of one option only.

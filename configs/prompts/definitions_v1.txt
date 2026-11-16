@@ -1,0 +1,7 @@
+A) suggestion: the speaker proposes an idea, an offer or a course of action, e.g. "maybe we should ..."
+B) command: the speaker tells someone to do something, as an order that would be impolite to refuse
+C) accept: a short reply that agrees with or accepts a previous speaker's proposal, question or statement, e.g. "yeah", "sure", "exactly"
+D) acknowledgement: a short reply that only shows a previous speaker's point was heard and understood, neither agreeing nor disagreeing, e.g. "I see", "okay", "oh"
+E) reject: a short negative reply to a previous speaker's proposal, question or statement, e.g. "no", "nah", "I don't think so"
+F) commitment: the speaker explicitly says what they will do in the future, e.g. "I'll send it"
+G) other: anything else, including statements, questions, and backchannels like "uhhuh" said while someone else is still talking
