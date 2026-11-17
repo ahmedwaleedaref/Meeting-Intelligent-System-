@@ -205,6 +205,7 @@ def main() -> None:
     parser.add_argument("--lr", type=float, default=None, help="override SETTINGS['lr']")
     parser.add_argument("--past-k", type=int, default=None, help="override SETTINGS['past_k'] (context segments before)")
     parser.add_argument("--future-k", type=int, default=None, help="override SETTINGS['future_k'] (context segments after)")
+    parser.add_argument("--separator", default=None, help="override SETTINGS['separator'] (text between two segments)")
     parser.add_argument("--grad-checkpointing", action="store_true",
                         help="recompute activations in backward : for inputs too long for the GPU's memory at this batch size")
     parser.add_argument("--fp32", action="store_true",
@@ -218,6 +219,8 @@ def main() -> None:
         SETTINGS["past_k"] = args.past_k
     if args.future_k is not None:
         SETTINGS["future_k"] = args.future_k
+    if args.separator is not None:
+        SETTINGS["separator"] = args.separator
     if args.grad_checkpointing:
         SETTINGS["grad_checkpointing"] = True
     if args.fp32:

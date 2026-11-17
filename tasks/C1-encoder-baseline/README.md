@@ -34,3 +34,4 @@ Next: the experiments in task.md, run through `scripts/trial_run.py`.
 | [exp04](experiments/exp04_context-k3/NOTE.md) | Context k = 3 (separator `"\n"`), adopted setting, 3 seeds: does context help? | 0.5524 ± 0.0103 (seeds 42/43/44: 0.5419 / 0.5624 / 0.5529); ~31 min per seed | context helps: +0.030, every seed improves; mostly `aa` (+0.144, fewer `aa` predicted as `other`); next k = 5, 10 |
 | [exp05](experiments/exp05_context-k5/NOTE.md) | Context k = 5 (separator `"\n"`, gradient checkpointing), adopted setting, 3 seeds: does more context help further? | pending | pending |
 | [exp06](experiments/exp06_context-k10/NOTE.md) | Context k = 10 (separator `"\n"`, gradient checkpointing), adopted setting, 3 seeds: does a much wider context help? | pending | pending |
+| [exp07](experiments/exp07_separator-sep-k3/NOTE.md) | Separator `[SEP]` instead of `"\n"` at k = 3, adopted setting, 3 seeds: does a real boundary between segments help? | pending | pending |
