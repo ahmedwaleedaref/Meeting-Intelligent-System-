@@ -50,6 +50,7 @@ SETTINGS = {
     "log_every": 50,
     "fp16": True,             # mixed precision (GPU only) ; False = fp32 , the pre-optimization setup
     "fused_optimizer": True,  # fused AdamW ; False = PyTorch's default implementation
+    "speaker_tags": False,  # True = "A: " , "B: " ... before each segment ; the target's speaker is A
     "grad_checkpointing": False,  # True = recompute each layer's activations in backward : less memory , ~1/3 more time
 }
 
@@ -83,6 +84,7 @@ def run_stage(
         "max_length": SETTINGS["max_length"],
         "separator": SETTINGS["separator"],
         "markers": tuple(SETTINGS["markers"]),
+        "speaker_tags": SETTINGS["speaker_tags"],
     }
     train_loader = build_dataloader(
         data_root / "train", batch_size=SETTINGS["batch_size"], shuffle=True, seed=seed,
@@ -99,7 +101,7 @@ def run_stage(
     total_steps = SETTINGS["epochs"] * math.ceil(len(train_loader) / SETTINGS["grad_accum_steps"])
     print(f"[{stage_dir.name}] seed {seed}: {len(train_loader)} train batches per epoch , "
           f"{total_steps} optimizer steps | fp16 {SETTINGS['fp16']} | fused AdamW {SETTINGS['fused_optimizer']} | "
-          f"grad checkpointing {SETTINGS['grad_checkpointing']}",
+          f"grad checkpointing {SETTINGS['grad_checkpointing']} | speaker tags {SETTINGS['speaker_tags']}",
           flush=True)
 
     # every history line is printed and appended to history.jsonl as soon as train creates it
@@ -206,6 +208,8 @@ def main() -> None:
     parser.add_argument("--past-k", type=int, default=None, help="override SETTINGS['past_k'] (context segments before)")
     parser.add_argument("--future-k", type=int, default=None, help="override SETTINGS['future_k'] (context segments after)")
     parser.add_argument("--separator", default=None, help="override SETTINGS['separator'] (text between two segments)")
+    parser.add_argument("--speaker-tags", action="store_true",
+                        help="start each segment with its speaker's letter ; the target's speaker is A")
     parser.add_argument("--grad-checkpointing", action="store_true",
                         help="recompute activations in backward : for inputs too long for the GPU's memory at this batch size")
     parser.add_argument("--fp32", action="store_true",
@@ -221,6 +225,8 @@ def main() -> None:
         SETTINGS["future_k"] = args.future_k
     if args.separator is not None:
         SETTINGS["separator"] = args.separator
+    if args.speaker_tags:
+        SETTINGS["speaker_tags"] = True
     if args.grad_checkpointing:
         SETTINGS["grad_checkpointing"] = True
     if args.fp32:

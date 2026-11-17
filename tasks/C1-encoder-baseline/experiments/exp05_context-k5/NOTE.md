@@ -32,10 +32,49 @@ Does more context help further? With 5 segments before and 5 after the target, h
 - **Run folders:** `exp05_k5_seed42`, `exp05_k5_seed43`, `exp05_k5_seed44`.
 
 ## Decision rule
-_Fill in before the runs:_ what difference from k = 3 counts as more context helping, hurting, or no different.
+Not written down before the runs (the same as exp04). The plan made before exp02 was to run k = 3, 5 and 10 and pick the best k.
 
 ## Result
-_Pending._
+All 3 runs finished with gradient checkpointing and no out-of-memory error, with 0 truncated train inputs and 2466 batches per epoch. ~17.2 min per epoch on GPU 0 (seeds 42, 44) and ~18.6 on GPU 1 (seed 43): ~52–56 min per run, against ~31 at k = 3.
+
+**The run folders were lost** (the downloaded `exp05_runs.zip` is gone). What's left is the printed output of the results cell: macro-F1 (6) and (7), per-class F1 at the selected epoch, and macro-F1 (6) per epoch. The confusion matrices, per-class F1 per epoch and prediction counts are lost.
+
+Val macro-F1 (6), selected epoch in brackets:
+
+| seed | k = 3 (exp04) | k = 5 | difference |
+|---|---|---|---|
+| 42 | 0.5419 (3) | 0.5529 (3) | +0.011 |
+| 43 | 0.5624 (3) | 0.5477 (3) | −0.015 |
+| 44 | 0.5529 (2) | 0.4659 (3) | −0.087 |
+| **mean ± std** | 0.5524 ± 0.0103 | **0.5222 ± 0.0488** | −0.030 ± 0.051 |
+
+Macro-F1 (7): 0.6069 ± 0.0088 → 0.5811 ± 0.0417.
+
+Val macro-F1 (6) per epoch:
+
+| | seed 42 | seed 43 | seed 44 |
+|---|---|---|---|
+| k = 3 | 0.425, 0.532, 0.542 | 0.447, 0.559, 0.562 | 0.449, 0.553, 0.549 |
+| k = 5 | 0.401, 0.464, 0.553 | 0.404, 0.527, 0.548 | 0.397, 0.465, 0.466 |
+
+Per-class F1, mean (std) over the 3 seeds:
+
+| | cs | co | aa | bk | ar | cc | other |
+|---|---|---|---|---|---|---|---|
+| k = 3 | 0.525 (0.019) | 0.465 (0.015) | 0.547 (0.009) | 0.619 (0.006) | 0.705 (0.006) | 0.455 (0.027) | 0.934 (0.000) |
+| k = 5 | 0.541 (0.008) | 0.444 (0.034) | 0.527 (0.009) | 0.616 (0.001) | 0.705 (0.008) | **0.299 (0.259)** | 0.935 (0.001) |
+| difference | +0.016 | −0.021 | −0.020 | −0.003 | 0.000 | −0.156 | +0.001 |
+
+`cc` per seed at k = 5: 0.459 / 0.438 / **0.000**.
 
 ## Conclusion
-_Pending._
+- **k = 5 doesn't beat k = 3.** The mean drops by 0.030, but almost all of it is one class in one seed.
+- **Seed 44 lost `cc` completely (F1 0.000).** Without it, seed 44's 5 other targets average 0.559, the same as seeds 42 and 43 (0.571, 0.570). With a typical `cc` of ~0.45 its macro-F1 (6) would be ~0.54.
+  - Whether the model predicted no `cc` at all, or predicted it only wrongly, can't be checked: the confusion matrix is lost.
+  - It's the rarest target (88 val segments), and a plain cross-entropy loss gives it no extra weight. This is the failure that the class-weighting experiment is meant to address.
+- **Seeds 42 and 43, `cc` intact:** 0.5503 vs k = 3's 0.5522 on the same seeds. No difference.
+- **Without `cc` at all** (the 5 other targets, mean over seeds): 0.567 vs 0.572 at k = 3. Also no gain.
+- **Per class:** `cs` +0.016, `co` −0.021, `aa` −0.020. All within about two stds; nothing that more context clearly helps.
+- **It learns more slowly.** At epoch 2, k = 5 is at 0.464 / 0.527 / 0.465, against 0.532 / 0.559 / 0.553 at k = 3. Seed 42 gains +0.089 in epoch 3, so it may not be done. The lr 1e-5, 3 epochs setting was tuned at k = 0. This is more evidence for the "do the hyperparameters transfer to k > 0" experiment, not proof that k = 5 would win with more epochs.
+- **Cost:** ~1.7× the time per run of k = 3 (~52–56 vs ~31 min), including ~1/3 from gradient checkpointing.
+- **Status:** k = 3 stays the reference. Whether k = 10 still runs at this setting is open.

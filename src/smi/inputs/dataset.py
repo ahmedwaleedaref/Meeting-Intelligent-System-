@@ -15,12 +15,18 @@ class SegmentItem(TypedDict):
                   (reverse speaking order : renderers must reverse it before joining)
     target_text : text of the target segment
     right       : texts of the segments after the target ; index 0 = closest , index k-1 = farthest
+    left_speakers  : speaker of each left segment , same order as left
+    target_speaker : speaker of the target segment
+    right_speakers : speaker of each right segment , same order as right
     """
     seg_id: str
     label: int | None
     left: list[str]
     target_text: str
     right: list[str]
+    left_speakers: list[str]
+    target_speaker: str
+    right_speakers: list[str]
 
 
 class SegmentDataset(Dataset):
@@ -85,19 +91,23 @@ class SegmentDataset(Dataset):
 
                 # previous segments, closest first, stop at the start of the meeting
                 left = []
+                left_speakers = []
                 for step in range(1, past_k + 1):
                     j = i - step
                     if j < 0:
                         break
                     left.append(rows[j]["text"])
+                    left_speakers.append(rows[j]["speaker"])
 
                 # next segments, closest first, stop at the end of the meeting
                 right = []
+                right_speakers = []
                 for step in range(1, future_k + 1):
                     j = i + step
                     if j >= len(rows):
                         break
                     right.append(rows[j]["text"])
+                    right_speakers.append(rows[j]["speaker"])
 
                 if is_test:
                     label = None
@@ -112,6 +122,9 @@ class SegmentDataset(Dataset):
                     left=left,
                     target_text=row["text"],
                     right=right,
+                    left_speakers=left_speakers,
+                    target_speaker=row["speaker"],
+                    right_speakers=right_speakers,
                 )
                 data_list.append(item)
 

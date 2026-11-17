@@ -24,6 +24,7 @@ def build_dataloader(
     seed: int = 0,
     allow_test: bool = False,
     keep_labels: tuple[str, ...] | None = None,
+    speaker_tags: bool = False,
 ) -> DataLoader:
     """
     the input pipeline of one split : SegmentDataset -> LengthBucketBatchSampler -> SegmentCollator -> DataLoader.
@@ -36,7 +37,7 @@ def build_dataloader(
     """
     dataset = SegmentDataset(split_dir, past_k, future_k, allow_test=allow_test, keep_labels=keep_labels)
     sampler = LengthBucketBatchSampler(dataset, batch_size, chunk_batches, shuffle, seed=seed)
-    collator = SegmentCollator(tokenizer, max_length, separator, markers=markers, suffix=suffix)
+    collator = SegmentCollator(tokenizer, max_length, separator, markers=markers, suffix=suffix, speaker_tags=speaker_tags)
 
     return DataLoader(
         dataset,

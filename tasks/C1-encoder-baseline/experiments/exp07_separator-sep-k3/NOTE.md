@@ -29,12 +29,58 @@ Does a real boundary between segments help? exp04 (k = 3) joined segments with `
 - **Run folders:** `exp07_k3_sep_seed42`, `exp07_k3_sep_seed43`, `exp07_k3_sep_seed44`.
 
 ## Decision rule
-_Fill in before the runs:_
-- what difference from exp04 counts as `[SEP]` helping, hurting, or no different;
-- which separator the later k experiments use if they are within seed noise.
+Not written down before the runs (the same as exp04 and exp05).
 
 ## Result
-_Pending._
+All 3 runs finished, with no out-of-memory error. Each one's `settings.json` matches the setup (separator `" [SEP] "`, `past_k = future_k = 3`, lr 1e-5, 3 epochs, no gradient checkpointing). 0 truncated train inputs, and every seed selected epoch 3. ~10.2 min per epoch on GPU 0 (seeds 42, 44) and ~11.1 on GPU 1 (seed 43): ~31–33 min per run, the same as exp04 (~31).
+
+Val macro-F1 (6), selected epoch in brackets:
+
+| seed | `"\n"` (exp04) | `" [SEP] "` | difference |
+|---|---|---|---|
+| 42 | 0.5419 (3) | 0.5545 (3) | +0.013 |
+| 43 | 0.5624 (3) | 0.5403 (3) | −0.022 |
+| 44 | 0.5529 (2) | 0.5539 (3) | +0.001 |
+| **mean ± std** | 0.5524 ± 0.0103 | **0.5496 ± 0.0080** | −0.003 ± 0.018 |
+
+Macro-F1 (7): 0.6069 ± 0.0088 → 0.6047 ± 0.0067.
+
+Val macro-F1 (6) per epoch:
+
+| | seed 42 | seed 43 | seed 44 |
+|---|---|---|---|
+| `"\n"` | 0.425, 0.532, 0.542 | 0.447, 0.559, 0.562 | 0.449, 0.553, 0.549 |
+| `" [SEP] "` | 0.423, 0.522, 0.555 | 0.390, 0.463, 0.540 | 0.456, 0.534, 0.554 |
+
+Per-class F1, mean (std) over the 3 seeds:
+
+| | cs | co | aa | bk | ar | cc | other |
+|---|---|---|---|---|---|---|---|
+| `"\n"` | 0.525 (0.019) | 0.465 (0.015) | 0.547 (0.009) | 0.619 (0.006) | 0.705 (0.006) | 0.455 (0.027) | 0.934 (0.000) |
+| `" [SEP] "` | 0.538 (0.015) | 0.470 (0.037) | 0.539 (0.005) | 0.620 (0.003) | 0.712 (0.001) | 0.418 (0.047) | 0.935 (0.001) |
+| difference | +0.013 | +0.004 | −0.007 | +0.001 | +0.007 | −0.036 | +0.001 |
+
+`cc` per seed with `[SEP]`: 0.468 / 0.374 / 0.414. Precision / recall: 0.480 / 0.432 → 0.576 / 0.337. That's ~26 fewer `cc` predictions per seed, ~8 of them correct.
+
+Confusion, mean over the 3 seeds, the cells that changed by more than 10 (gold → predicted):
+
+| | `"\n"` | `" [SEP] "` |
+|---|---|---|
+| `aa` → `aa` (of 817) | 446 | 424 |
+| `bk` → `aa` | 115 | 103 |
+| `other` → `aa` | 247 | 225 |
+| `other` → `cs` | 195 | 163 |
+| `other` → `cc` | 35 | 21 |
+| `other` → `other` | 12704 | 12765 |
+
+Same seed, `"\n"` vs `" [SEP] "`: the two models agree on 96.6–97.2 % of the val segments. Two seeds with the same separator agree on 96.8–97.1 %. Changing the separator changes the predictions about as much as changing the seed.
 
 ## Conclusion
-_Pending._
+- **No difference: −0.003 ± 0.018.** One seed is better (+0.013), one is worse (−0.022) and one is equal. The mean is well inside seed noise.
+- **Per class, nothing outside noise either.**
+  - `cs` +0.013 and `ar` +0.007 are within one std.
+  - `cc` −0.036 has std 0.047 and 88 val segments; it can't be read either way. `[SEP]` predicts `cc` less often, more precisely but with lower recall.
+- **With `[SEP]`, all targets are predicted slightly less often.** `other` → `cs`, `aa` and `cc` drop by 14–32 segments each, and `aa` recall drops 0.545 → 0.519. This is a small shift towards `other`, not a better separation between classes.
+- **The likely reason:** the token boundary is new information, but the model already found the boundaries without it. With `"\n"`, a segment boundary is usually also a change of wording, often a backchannel (e.g. "yeah", "uh-huh") or a new sentence start. And `[SEP]` says nothing about who is speaking, which is probably what matters for `aa` / `bk` / `cc` (who replies to whom). This is a hypothesis; this experiment doesn't test it.
+- **Cost:** the same time per run (+7.5 % tokens didn't show up in the run time).
+- **Status:** the separator doesn't matter at k = 3 at this setting. Which separator the later experiments use is open.

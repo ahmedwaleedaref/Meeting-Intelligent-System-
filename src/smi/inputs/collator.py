@@ -36,6 +36,7 @@ class SegmentCollator:
         separator: str,
         markers: tuple[str, str] = ("[T]", "[/T]"),
         suffix: str = "",
+        speaker_tags: bool = False,
     ) -> None:
         """
         tokenizer  : the model's tokenizer , loaded from the same checkpoint name as the model ;
@@ -44,6 +45,9 @@ class SegmentCollator:
         separator  : text between two segments
         markers    : (open , close) text wrapped around the target ; spaces , if wanted , are part of them
         suffix     : text added after the last segment ; "" for the encoder
+        speaker_tags : True = each segment starts with its speaker's letter , "A: " ... ;
+                       the target's speaker is always A , the others get B , C , ... in order of
+                       first appearance in the window (speaker ids themselves never reach the model)
 
         counters , since this collator was created (read them after an epoch to see how often truncation fires) :
         n_items     : number of items collated
@@ -54,6 +58,7 @@ class SegmentCollator:
         self.separator = separator
         self.markers = markers
         self.suffix = suffix
+        self.speaker_tags = speaker_tags
         self.n_items = 0
         self.n_truncated = 0
 
@@ -62,17 +67,36 @@ class SegmentCollator:
         the input text of one item :
         separator.join(reversed(left) + [open + target_text + close] + right) + suffix
         left is closest-first in the item , so it is reversed here to get speaking order.
+        with speaker_tags , each segment is "<letter>: <text>" (see __init__).
         """
         open_marker = self.markers[0]
         close_marker = self.markers[1]
 
+        # texts and speakers in speaking order ; left is closest-first : walk it backwards
+        texts = []
+        speakers = []
+        for j in reversed(range(len(item["left"]))):
+            texts.append(item["left"][j])
+            speakers.append(item["left_speakers"][j])
+        texts.append(open_marker + item["target_text"] + close_marker)
+        speakers.append(item["target_speaker"])
+        for j in range(len(item["right"])):
+            texts.append(item["right"][j])
+            speakers.append(item["right_speakers"][j])
+
         segments = []
-        # left is closest-first : walk it backwards to get speaking order
-        for text in reversed(item["left"]):
-            segments.append(text)
-        segments.append(open_marker + item["target_text"] + close_marker)
-        for text in item["right"]:
-            segments.append(text)
+        if self.speaker_tags:
+            # target's speaker = A , then a new letter for each new speaker , in speaking order
+            letters = {item["target_speaker"]: "A"}
+            for speaker in speakers:
+                if speaker not in letters:
+                    if len(letters) == 26:
+                        raise ValueError(f"{item['seg_id']}: more than 26 speakers in one window")
+                    letters[speaker] = chr(ord("A") + len(letters))
+            for j in range(len(texts)):
+                segments.append(letters[speakers[j]] + ": " + texts[j])
+        else:
+            segments = texts
 
         # the suffix is glued to the end , not joined with the separator
         return self.separator.join(segments) + self.suffix
